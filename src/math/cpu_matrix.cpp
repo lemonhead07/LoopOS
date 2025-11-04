@@ -258,7 +258,7 @@ std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
     auto result = std::make_unique<CPUMatrix>(rows_, cols_);
     
     if (dim == -1 || dim == 1) {
-        // Softmax across columns (each row)
+        // Softmax across columns (each row independently)
         for (size_t i = 0; i < rows_; ++i) {
             float max_val = at(i, 0);
             for (size_t j = 1; j < cols_; ++j) {
@@ -273,6 +273,25 @@ std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
             }
             
             for (size_t j = 0; j < cols_; ++j) {
+                result->at(i, j) /= sum_exp;
+            }
+        }
+    } else if (dim == 0) {
+        // Softmax across rows (each column independently)
+        for (size_t j = 0; j < cols_; ++j) {
+            float max_val = at(0, j);
+            for (size_t i = 1; i < rows_; ++i) {
+                max_val = std::max(max_val, at(i, j));
+            }
+            
+            float sum_exp = 0.0f;
+            for (size_t i = 0; i < rows_; ++i) {
+                float exp_val = std::exp(at(i, j) - max_val);
+                result->at(i, j) = exp_val;
+                sum_exp += exp_val;
+            }
+            
+            for (size_t i = 0; i < rows_; ++i) {
                 result->at(i, j) /= sum_exp;
             }
         }

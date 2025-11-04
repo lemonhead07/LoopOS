@@ -21,6 +21,31 @@ add_library(math_backend STATIC
 )
 target_link_libraries(math_backend utils)
 
+# Transformer Library
+add_library(transformer STATIC
+    src/transformer/attention.cpp
+    src/transformer/feedforward.cpp
+    src/transformer/layer_norm.cpp
+    src/transformer/transformer.cpp
+)
+target_link_libraries(transformer math_backend utils)
+
+# Pre-training Library
+add_library(pretraining STATIC
+    src/pretraining/autoregressive.cpp
+    src/pretraining/masked_lm.cpp
+    src/pretraining/contrastive.cpp
+)
+target_link_libraries(pretraining transformer math_backend utils)
+
+# Post-training Library
+add_library(posttraining STATIC
+    src/posttraining/fine_tuning.cpp
+    src/posttraining/chain_of_thought.cpp
+    src/posttraining/reinforcement.cpp
+)
+target_link_libraries(posttraining transformer math_backend utils)
+
 # Hardware Detection Module
 add_library(hardware_detection STATIC
     src/hardware/cpu_detector.cpp
@@ -39,7 +64,7 @@ target_link_libraries(config utils)
 add_library(executor STATIC
     src/executor/computation_executor.cpp
 )
-target_link_libraries(executor config utils)
+target_link_libraries(executor config pretraining posttraining transformer utils)
 
 # Main executable
 add_executable(loop_os src/main.cpp)
