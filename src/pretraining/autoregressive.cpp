@@ -115,8 +115,8 @@ float AutoregressiveTrainer::compute_loss(const std::vector<int>& input_ids, con
         
         // Get probability of target token
         int target_token = target_ids[i];
-        if (target_token >= vocab_size_) {
-            throw std::out_of_range("Target token exceeds vocabulary size");
+        if (target_token < 0 || target_token >= vocab_size_) {
+            throw std::out_of_range("Target token ID is out of vocabulary range");
         }
         
         float target_prob = probs->at(0, target_token);

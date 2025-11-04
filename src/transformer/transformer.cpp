@@ -136,15 +136,19 @@ MatrixPtr Transformer::forward(const std::vector<int>& src, const std::vector<in
 }
 
 void Transformer::save_weights(const std::string& path) {
-    // Implementation for saving model weights
-    // This would serialize all weight matrices to a file
-    throw std::runtime_error("Weight saving not yet implemented");
+    // Basic implementation for saving model weights
+    // In a production system, this would serialize all weight matrices to a binary file
+    // For now, we provide a stub that can be extended
+    (void)path;  // Suppress unused parameter warning
+    throw std::runtime_error("Weight saving not yet fully implemented. Extend this method to serialize weights.");
 }
 
 void Transformer::load_weights(const std::string& path) {
-    // Implementation for loading model weights
-    // This would deserialize weight matrices from a file
-    throw std::runtime_error("Weight loading not yet implemented");
+    // Basic implementation for loading model weights
+    // In a production system, this would deserialize weight matrices from a binary file
+    // For now, we provide a stub that can be extended
+    (void)path;  // Suppress unused parameter warning
+    throw std::runtime_error("Weight loading not yet fully implemented. Extend this method to deserialize weights.");
 }
 
 } // namespace Transformer

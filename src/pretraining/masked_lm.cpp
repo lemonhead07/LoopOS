@@ -100,8 +100,8 @@ float MaskedLMTrainer::compute_mlm_loss(
         
         // Get probability of true token
         int true_token = true_labels[i];
-        if (true_token >= vocab_size_) {
-            throw std::out_of_range("True token exceeds vocabulary size");
+        if (true_token < 0 || true_token >= vocab_size_) {
+            throw std::out_of_range("True token ID is out of vocabulary range");
         }
         
         float target_prob = probs->at(0, true_token);

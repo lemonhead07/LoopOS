@@ -42,6 +42,10 @@ MatrixPtr MultiHeadAttention::scaled_dot_product_attention(
     
     // 3. Apply mask if provided (for causal/padding masks)
     if (mask != nullptr) {
+        // Validate mask dimensions match scores
+        if (mask->rows() != scores->rows() || mask->cols() != scores->cols()) {
+            throw std::invalid_argument("Mask dimensions must match attention scores dimensions");
+        }
         // Add mask (typically -inf for masked positions)
         scores->add_inplace(*mask);
     }
