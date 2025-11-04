@@ -29,6 +29,18 @@ add_library(hardware_detection STATIC
 )
 target_link_libraries(hardware_detection utils)
 
+# Configuration Library
+add_library(config STATIC
+    src/config/configuration.cpp
+)
+target_link_libraries(config utils)
+
+# Executor Library
+add_library(executor STATIC
+    src/executor/computation_executor.cpp
+)
+target_link_libraries(executor config utils)
+
 # Main executable
 add_executable(loop_os src/main.cpp)
 target_link_libraries(loop_os 
@@ -44,6 +56,14 @@ target_link_libraries(hardware_demo hardware_detection utils)
 add_executable(matrix_demo examples/matrix_demo.cpp)
 target_link_libraries(matrix_demo math_backend utils)
 
+# CLI executable
+add_executable(loop_cli src/cli_main.cpp)
+target_link_libraries(loop_cli
+    executor
+    config
+    utils
+)
+
 # Enable testing
 enable_testing()
 
@@ -55,4 +75,12 @@ target_link_libraries(basic_tests
     utils
 )
 
+add_executable(cli_tests tests/cli_tests.cpp)
+target_link_libraries(cli_tests
+    executor
+    config
+    utils
+)
+
 add_test(NAME BasicTests COMMAND basic_tests)
+add_test(NAME CLITests COMMAND cli_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

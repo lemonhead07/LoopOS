@@ -1,0 +1,25 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 1024,
+    "num_heads": 16,
+    "num_layers": 24,
+    "d_ff": 4096,
+    "vocab_size": 50000
+  },
+  "computation": {
+    "mode": "posttraining",
+    "method": "chain_of_thought",
+    "description": "Chain-of-thought reasoning training"
+  },
+  "training": {
+    "learning_rate": 0.00001,
+    "batch_size": 16,
+    "num_epochs": 3
+  },
+  "data": {
+    "pretrained_weights": "models/pretrained_model.bin",
+    "reasoning_examples": "data/reasoning_examples.txt",
+    "output_dir": "outputs/chain_of_thought"
+  }
+}

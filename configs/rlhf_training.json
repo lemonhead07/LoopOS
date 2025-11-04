@@ -1,0 +1,27 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 1024,
+    "num_heads": 16,
+    "num_layers": 24,
+    "d_ff": 4096,
+    "vocab_size": 50000
+  },
+  "computation": {
+    "mode": "posttraining",
+    "method": "rlhf",
+    "description": "Reinforcement learning from human feedback"
+  },
+  "training": {
+    "learning_rate": 0.000001,
+    "clip_epsilon": 0.2,
+    "kl_coefficient": 0.1,
+    "batch_size": 8,
+    "num_epochs": 1
+  },
+  "data": {
+    "pretrained_weights": "models/pretrained_model.bin",
+    "preference_data": "data/human_preferences.txt",
+    "output_dir": "outputs/rlhf"
+  }
+}

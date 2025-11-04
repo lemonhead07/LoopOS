@@ -1,0 +1,25 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 512,
+    "num_heads": 8,
+    "num_layers": 6,
+    "d_ff": 2048,
+    "vocab_size": 50000
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "contrastive",
+    "description": "Contrastive learning pre-training"
+  },
+  "training": {
+    "learning_rate": 0.001,
+    "temperature": 0.07,
+    "batch_size": 256,
+    "num_epochs": 100
+  },
+  "data": {
+    "input_file": "data/pretraining/sample.txt",
+    "output_dir": "outputs/contrastive"
+  }
+}
