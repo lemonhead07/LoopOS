@@ -1,0 +1,25 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 512,
+    "num_heads": 8,
+    "num_layers": 6,
+    "d_ff": 2048,
+    "vocab_size": 50000
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "autoregressive",
+    "description": "GPT-style autoregressive language modeling"
+  },
+  "training": {
+    "learning_rate": 0.0001,
+    "max_length": 128,
+    "batch_size": 32,
+    "num_epochs": 10
+  },
+  "data": {
+    "input_file": "data/pretraining/sample.txt",
+    "output_dir": "outputs/autoregressive"
+  }
+}

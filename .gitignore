@@ -7,6 +7,7 @@ build/
 
 # Executables
 loop_os
+loop_cli
 hardware_demo
 matrix_demo
 pretraining_demo
@@ -36,6 +37,9 @@ data/pretraining/text/
 data/pretraining/embeddings/
 data/pretraining/tokenized/
 data/pretraining/processed/
+
+# Output directories
+outputs/
 
 # Keep README files
 !data/pretraining/README.md

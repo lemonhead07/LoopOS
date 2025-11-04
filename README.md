@@ -15,6 +15,7 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
   - Fine-tuning
   - Chain-of-Thought reasoning
   - Reinforcement Learning from Human Feedback (RLHF)
+- **JSON-based CLI**: Select and configure computations via JSON configuration files
 - **Real-time Logging**: Color-coded console output with daily log rotation
 
 ## Quick Start
@@ -37,6 +38,30 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 # Run matrix operations demo
 ./scripts/run_matrix_demo.sh
 ```
+
+### CLI Usage
+
+The CLI allows you to select and run different model computations using JSON configuration files:
+
+```bash
+# List all available configurations
+./build/loop_cli --list-configs
+
+# Validate a configuration file
+./build/loop_cli --validate configs/autoregressive_training.json
+
+# Run a specific computation
+./build/loop_cli --config configs/autoregressive_training.json
+
+# Shorthand
+./build/loop_cli -c configs/masked_lm_training.json
+```
+
+Available configurations:
+- **Pre-training**: `autoregressive_training.json`, `masked_lm_training.json`, `contrastive_training.json`
+- **Post-training**: `fine_tuning.json`, `chain_of_thought.json`, `rlhf_training.json`
+
+See `configs/README.md` for detailed documentation on JSON configuration format.
 
 ### Test
 
@@ -63,11 +88,15 @@ LoopOS/
 │   ├── transformer/      # Transformer architecture
 │   ├── pretraining/      # Pre-training methods
 │   ├── posttraining/     # Post-training methods
+│   ├── config/           # Configuration management
+│   ├── executor/         # Computation executor
+│   ├── external/         # External libraries (JSON parser)
 │   └── utils/            # Logging and utilities
 ├── src/                  # Implementation files
 ├── examples/             # Demo applications
 ├── tests/                # Unit tests
 ├── scripts/              # Build and run scripts
+├── configs/              # JSON configuration files
 ├── data/pretraining/     # Put your training data here
 └── logs/                 # Daily rotating logs
 
