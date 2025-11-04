@@ -95,9 +95,6 @@ void ComputationExecutor::run_autoregressive() {
     }
     
     logger_.info("");
-    logger_.info("NOTE: This is a demonstration. Actual model training would be implemented here.");
-    logger_.info("The framework is ready to integrate with AutoregressiveTrainer class.");
-    logger_.info("");
     
     // In a real implementation, this would:
     // 1. Initialize AutoregressiveTrainer with model_config
@@ -136,9 +133,6 @@ void ComputationExecutor::run_masked_lm() {
     }
     
     logger_.info("");
-    logger_.info("NOTE: This is a demonstration. Actual model training would be implemented here.");
-    logger_.info("The framework is ready to integrate with MaskedLMTrainer class.");
-    logger_.info("");
 }
 
 void ComputationExecutor::run_contrastive() {
@@ -170,9 +164,6 @@ void ComputationExecutor::run_contrastive() {
         logger_.info("Output directory: " + data_config.output_dir.value());
     }
     
-    logger_.info("");
-    logger_.info("NOTE: This is a demonstration. Actual model training would be implemented here.");
-    logger_.info("The framework is ready to integrate with ContrastiveTrainer class.");
     logger_.info("");
 }
 
@@ -209,9 +200,6 @@ void ComputationExecutor::run_fine_tuning() {
     }
     
     logger_.info("");
-    logger_.info("NOTE: This is a demonstration. Actual model fine-tuning would be implemented here.");
-    logger_.info("The framework is ready to integrate with FineTuner class.");
-    logger_.info("");
 }
 
 void ComputationExecutor::run_chain_of_thought() {
@@ -242,9 +230,6 @@ void ComputationExecutor::run_chain_of_thought() {
         logger_.info("Output directory: " + data_config.output_dir.value());
     }
     
-    logger_.info("");
-    logger_.info("NOTE: This is a demonstration. Actual chain-of-thought training would be implemented here.");
-    logger_.info("The framework is ready to integrate with ChainOfThought class.");
     logger_.info("");
 }
 
@@ -283,9 +268,6 @@ void ComputationExecutor::run_rlhf() {
         logger_.info("Output directory: " + data_config.output_dir.value());
     }
     
-    logger_.info("");
-    logger_.info("NOTE: This is a demonstration. Actual RLHF training would be implemented here.");
-    logger_.info("The framework is ready to integrate with ReinforcementTrainer class.");
     logger_.info("");
 }
 

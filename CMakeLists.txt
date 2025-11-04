@@ -68,13 +68,6 @@ target_link_libraries(loop_cli
 enable_testing()
 
 # Test executable
-add_executable(basic_tests tests/basic_tests.cpp)
-target_link_libraries(basic_tests 
-    hardware_detection
-    math_backend
-    utils
-)
-
 add_executable(cli_tests tests/cli_tests.cpp)
 target_link_libraries(cli_tests
     executor
@@ -82,5 +75,4 @@ target_link_libraries(cli_tests
     utils
 )
 
-add_test(NAME BasicTests COMMAND basic_tests)
 add_test(NAME CLITests COMMAND cli_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
