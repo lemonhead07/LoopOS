@@ -67,10 +67,9 @@ See `configs/README.md` for detailed documentation on JSON configuration format.
 
 ```bash
 cd build
-./basic_tests
-# or
 ctest
 ```
+
 
 ### Clean
 
