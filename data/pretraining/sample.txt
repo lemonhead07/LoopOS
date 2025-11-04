@@ -1,0 +1,5 @@
+This is a sample text file for pre-training transformer models.
+The transformer architecture has revolutionized natural language processing.
+Deep learning models can learn complex patterns from large amounts of text data.
+Attention mechanisms allow models to focus on relevant parts of the input.
+Pre-training on large corpora enables transfer learning to downstream tasks.
