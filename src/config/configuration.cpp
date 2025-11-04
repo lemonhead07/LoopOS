@@ -145,9 +145,12 @@ bool Configuration::validate() const {
             return false;
         }
         
-        // Posttraining requires pretrained weights
+        // Posttraining requires pretrained weights (optional check)
+        // Note: This is a warning, not an error, as the system can still demonstrate
+        // the computation flow without actual pretrained weights
         if (!data_config_.pretrained_weights.has_value()) {
             logger.warning("Posttraining method specified but no pretrained_weights provided");
+            logger.warning("In production, pretrained weights would be required");
         }
     }
     

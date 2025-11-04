@@ -3,6 +3,8 @@
 #include "utils/logger.hpp"
 #include <iostream>
 #include <cassert>
+#include <filesystem>
+#include <vector>
 
 void test_config_loading() {
     std::cout << "Testing configuration loading..." << std::endl;
@@ -61,16 +63,27 @@ void test_executor() {
 void test_all_configs() {
     std::cout << "Testing all configuration files..." << std::endl;
     
-    const char* configs[] = {
-        "configs/autoregressive_training.json",
-        "configs/masked_lm_training.json",
-        "configs/contrastive_training.json",
-        "configs/fine_tuning.json",
-        "configs/chain_of_thought.json",
-        "configs/rlhf_training.json"
-    };
+    // Dynamically discover all JSON config files
+    std::string configs_dir = "configs";
+    std::vector<std::string> config_files;
     
-    for (const auto& config_file : configs) {
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(configs_dir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".json") {
+                config_files.push_back(entry.path().string());
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "  ✗ Failed to scan configs directory: " << e.what() << std::endl;
+        throw;
+    }
+    
+    if (config_files.empty()) {
+        std::cerr << "  ✗ No configuration files found in configs/" << std::endl;
+        throw std::runtime_error("No config files found");
+    }
+    
+    for (const auto& config_file : config_files) {
         try {
             auto config = LoopOS::Config::Configuration::load_from_file(config_file);
             assert(config->validate() == true);
