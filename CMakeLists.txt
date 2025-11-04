@@ -10,54 +10,49 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2")
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
+# Utilities (Logger)
+add_library(utils STATIC
+    src/utils/logger.cpp
+)
+
+# Math Library (Abstracted Matrix Backend)
+add_library(math_backend STATIC
+    src/math/cpu_matrix.cpp
+)
+target_link_libraries(math_backend utils)
+
 # Hardware Detection Module
 add_library(hardware_detection STATIC
     src/hardware/cpu_detector.cpp
     src/hardware/gpu_detector.cpp
     src/hardware/memory_detector.cpp
 )
-
-# Transformer Model Core
-add_library(transformer_core STATIC
-    src/transformer/transformer.cpp
-    src/transformer/attention.cpp
-    src/transformer/feedforward.cpp
-    src/transformer/layer_norm.cpp
-)
-
-# Pre-training Methods (based on research papers)
-add_library(pretraining STATIC
-    src/pretraining/autoregressive.cpp
-    src/pretraining/masked_lm.cpp
-    src/pretraining/contrastive.cpp
-)
-
-# Post-training Methods with Reasoning
-add_library(posttraining STATIC
-    src/posttraining/fine_tuning.cpp
-    src/posttraining/chain_of_thought.cpp
-    src/posttraining/reinforcement.cpp
-)
+target_link_libraries(hardware_detection utils)
 
 # Main executable
 add_executable(loop_os src/main.cpp)
 target_link_libraries(loop_os 
-    hardware_detection 
-    transformer_core 
-    pretraining 
-    posttraining
+    hardware_detection
+    math_backend
+    utils
 )
 
 # Individual project executables
 add_executable(hardware_demo examples/hardware_demo.cpp)
-target_link_libraries(hardware_demo hardware_detection)
+target_link_libraries(hardware_demo hardware_detection utils)
 
-add_executable(pretraining_demo examples/pretraining_demo.cpp)
-target_link_libraries(pretraining_demo transformer_core pretraining)
-
-add_executable(posttraining_demo examples/posttraining_demo.cpp)
-target_link_libraries(posttraining_demo transformer_core posttraining)
+add_executable(matrix_demo examples/matrix_demo.cpp)
+target_link_libraries(matrix_demo math_backend utils)
 
 # Enable testing
 enable_testing()
-add_subdirectory(tests OPTIONAL)
+
+# Test executable
+add_executable(basic_tests tests/basic_tests.cpp)
+target_link_libraries(basic_tests 
+    hardware_detection
+    math_backend
+    utils
+)
+
+add_test(NAME BasicTests COMMAND basic_tests)

@@ -1,0 +1,42 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.dylib
+
+# Executables
+loop_os
+hardware_demo
+matrix_demo
+pretraining_demo
+posttraining_demo
+basic_tests
+
+# Log files (keep directory structure but ignore logs)
+logs/*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Data (user should populate)
+data/pretraining/text/
+data/pretraining/embeddings/
+data/pretraining/tokenized/
+data/pretraining/processed/
+
+# Keep README files
+!data/pretraining/README.md
+!*/README.md
