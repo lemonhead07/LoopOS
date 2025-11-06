@@ -52,8 +52,8 @@ float ContrastiveTrainer::compute_contrastive_loss(
     }
     
     // Get embeddings
-    auto anchor_output = model_->forward(anchor, anchor);
-    auto positive_output = model_->forward(positive, positive);
+    auto anchor_output = model_->forward(anchor);
+    auto positive_output = model_->forward(positive);
     
     // Pool to get sentence embeddings (mean pooling)
     float anchor_sum = 0.0f;
@@ -80,7 +80,7 @@ float ContrastiveTrainer::compute_contrastive_loss(
     
     for (const auto& negative : negatives) {
         if (!negative.empty()) {
-            auto negative_output = model_->forward(negative, negative);
+            auto negative_output = model_->forward(negative);
             
             float negative_sum = 0.0f;
             for (size_t i = 0; i < negative_output->rows(); ++i) {

@@ -2,153 +2,251 @@
 #include "math/cpu_matrix.hpp"
 #include <cmath>
 #include <stdexcept>
+#include <omp.h>
 
 namespace LoopOS {
 namespace Transformer {
 
-// TransformerEncoderLayer implementation
-TransformerEncoderLayer::TransformerEncoderLayer(int d_model, int num_heads, int d_ff, float dropout)
-    : dropout_(dropout) {
+// TransformerLayer implementation
+TransformerLayer::TransformerLayer(
+    int d_model, int num_heads, int d_ff, float dropout)
+    : d_model_(d_model), num_heads_(num_heads), d_ff_(d_ff), dropout_(dropout) {
     
     attention_ = std::make_unique<MultiHeadAttention>(d_model, num_heads);
-    feed_forward_ = std::make_unique<FeedForward>(d_model, d_ff);
+    feedforward_ = std::make_unique<FeedForward>(d_model, d_ff);
     norm1_ = std::make_unique<LayerNorm>(d_model);
     norm2_ = std::make_unique<LayerNorm>(d_model);
 }
 
-MatrixPtr TransformerEncoderLayer::forward(const Matrix& x, const Matrix* mask) {
-    // Self-attention with residual connection and layer norm
-    auto attention_output = attention_->forward(x, x, x, mask);
-    auto residual1 = x.add(*attention_output);
-    auto normed1 = norm1_->forward(*residual1);
+void TransformerLayer::fused_residual_norm(
+    const Math::IMatrix& x,
+    const Math::IMatrix& residual,
+    LayerNorm& norm,
+    Math::IMatrix& output) {
     
-    // Feed-forward with residual connection and layer norm
-    auto ff_output = feed_forward_->forward(*normed1);
-    auto residual2 = normed1->add(*ff_output);
-    auto output = norm2_->forward(*residual2);
+    // Fused: output = norm(x + residual)
+    auto sum = x.add(residual);
+    auto normed = norm.forward(*sum);
+    
+    // Copy to output
+    #pragma omp parallel for
+    for (size_t i = 0; i < normed->size(); ++i) {
+        output.data()[i] = normed->data()[i];
+    }
+}
+
+std::unique_ptr<Math::IMatrix> TransformerLayer::forward(
+    const Math::IMatrix& x,
+    const Math::IMatrix* mask) {
+    
+    size_t seq_len = x.rows();
+    
+    // Pre-norm architecture: norm -> attention -> residual
+    // More stable for deep networks
+    
+    // 1. Self-attention with pre-norm
+    auto normed1 = norm1_->forward(x);
+    auto attn_output = attention_->forward(*normed1, *normed1, *normed1, mask);
+    auto residual1 = x.add(*attn_output);
+    
+    // 2. Feedforward with pre-norm
+    auto normed2 = norm2_->forward(*residual1);
+    auto ff_output = feedforward_->forward(*normed2);
+    auto output = residual1->add(*ff_output);
     
     return output;
 }
 
-// TransformerDecoderLayer implementation
-TransformerDecoderLayer::TransformerDecoderLayer(int d_model, int num_heads, int d_ff, float dropout)
-    : dropout_(dropout) {
+std::vector<std::unique_ptr<Math::IMatrix>> TransformerLayer::forward_batched(
+    const std::vector<const Math::IMatrix*>& x_batch,
+    const Math::IMatrix* mask) {
     
-    self_attention_ = std::make_unique<MultiHeadAttention>(d_model, num_heads);
-    cross_attention_ = std::make_unique<MultiHeadAttention>(d_model, num_heads);
-    feed_forward_ = std::make_unique<FeedForward>(d_model, d_ff);
-    norm1_ = std::make_unique<LayerNorm>(d_model);
-    norm2_ = std::make_unique<LayerNorm>(d_model);
-    norm3_ = std::make_unique<LayerNorm>(d_model);
-}
-
-MatrixPtr TransformerDecoderLayer::forward(
-    const Matrix& x, const Matrix& encoder_output,
-    const Matrix* self_mask, const Matrix* cross_mask) {
+    size_t batch_size = x_batch.size();
+    std::vector<std::unique_ptr<Math::IMatrix>> outputs(batch_size);
     
-    // Self-attention with residual connection and layer norm
-    auto self_attn_output = self_attention_->forward(x, x, x, self_mask);
-    auto residual1 = x.add(*self_attn_output);
-    auto normed1 = norm1_->forward(*residual1);
+    // Process batch in parallel
+    #pragma omp parallel for schedule(dynamic)
+    for (size_t b = 0; b < batch_size; ++b) {
+        outputs[b] = forward(*x_batch[b], mask);
+    }
     
-    // Cross-attention with residual connection and layer norm
-    auto cross_attn_output = cross_attention_->forward(*normed1, encoder_output, encoder_output, cross_mask);
-    auto residual2 = normed1->add(*cross_attn_output);
-    auto normed2 = norm2_->forward(*residual2);
-    
-    // Feed-forward with residual connection and layer norm
-    auto ff_output = feed_forward_->forward(*normed2);
-    auto residual3 = normed2->add(*ff_output);
-    auto output = norm3_->forward(*residual3);
-    
-    return output;
+    return outputs;
 }
 
 // Transformer implementation
-Transformer::Transformer(int d_model, int num_heads, int num_encoder_layers,
-                         int num_decoder_layers, int d_ff, int vocab_size)
-    : d_model_(d_model), vocab_size_(vocab_size) {
+Transformer::Transformer(
+    int d_model,
+    int num_heads,
+    int num_layers,
+    int d_ff,
+    int vocab_size,
+    int max_seq_len)
+    : d_model_(d_model),
+      num_heads_(num_heads),
+      num_layers_(num_layers),
+      d_ff_(d_ff),
+      vocab_size_(vocab_size),
+      max_seq_len_(max_seq_len) {
     
-    // Initialize embedding matrix
-    float embedding_scale = std::sqrt(1.0f / static_cast<float>(d_model));
-    embedding_matrix_ = Math::MatrixFactory::random_normal(vocab_size, d_model, 0.0f, embedding_scale);
+    initialize_embeddings();
     
-    // Create encoder layers
-    for (int i = 0; i < num_encoder_layers; ++i) {
-        encoder_layers_.push_back(
-            std::make_unique<TransformerEncoderLayer>(d_model, num_heads, d_ff)
-        );
+    // Create transformer layers
+    for (int i = 0; i < num_layers; ++i) {
+        layers_.push_back(
+            std::make_unique<TransformerLayer>(d_model, num_heads, d_ff));
     }
     
-    // Create decoder layers
-    for (int i = 0; i < num_decoder_layers; ++i) {
-        decoder_layers_.push_back(
-            std::make_unique<TransformerDecoderLayer>(d_model, num_heads, d_ff)
-        );
-    }
+    // Final layer norm and output projection
+    final_norm_ = std::make_unique<LayerNorm>(d_model);
+    
+    float scale = std::sqrt(1.0f / static_cast<float>(d_model));
+    output_projection_ = Math::MatrixFactory::random_normal(d_model, vocab_size, 0.0f, scale);
 }
 
-MatrixPtr Transformer::forward(const std::vector<int>& src, const std::vector<int>& tgt) {
-    // This is a simplified forward pass
-    // In production, you'd handle batching, padding, and positional encodings
+void Transformer::initialize_embeddings() {
+    float scale = std::sqrt(1.0f / static_cast<float>(d_model_));
     
-    size_t src_len = src.size();
-    size_t tgt_len = tgt.size();
+    // Token embeddings
+    token_embedding_ = Math::MatrixFactory::random_normal(vocab_size_, d_model_, 0.0f, scale);
     
-    // Create source embeddings
-    auto src_embeddings = Math::MatrixFactory::create(src_len, d_model_);
-    for (size_t i = 0; i < src_len; ++i) {
-        if (src[i] >= vocab_size_) {
-            throw std::out_of_range("Token ID exceeds vocabulary size");
+    // Learned positional embeddings
+    position_embedding_ = Math::MatrixFactory::random_normal(max_seq_len_, d_model_, 0.0f, scale);
+}
+
+std::unique_ptr<Math::IMatrix> Transformer::embed_tokens(
+    const std::vector<int>& token_ids) {
+    
+    size_t seq_len = token_ids.size();
+    auto embeddings = Math::MatrixFactory::create(seq_len, d_model_);
+    
+    // Lookup token embeddings and add positional embeddings
+    #pragma omp parallel for
+    for (size_t i = 0; i < seq_len; ++i) {
+        int token_id = token_ids[i];
+        if (token_id < 0 || token_id >= vocab_size_) {
+            token_id = 0;  // Unknown token
         }
+        
         for (int j = 0; j < d_model_; ++j) {
-            src_embeddings->at(i, j) = embedding_matrix_->at(src[i], j);
+            float token_emb = token_embedding_->at(token_id, j);
+            float pos_emb = position_embedding_->at(i % max_seq_len_, j);
+            embeddings->at(i, j) = token_emb + pos_emb;
         }
     }
     
-    // Create target embeddings
-    auto tgt_embeddings = Math::MatrixFactory::create(tgt_len, d_model_);
-    for (size_t i = 0; i < tgt_len; ++i) {
-        if (tgt[i] >= vocab_size_) {
-            throw std::out_of_range("Token ID exceeds vocabulary size");
+    return embeddings;
+}
+
+std::vector<std::unique_ptr<Math::IMatrix>> Transformer::embed_tokens_batched(
+    const std::vector<std::vector<int>>& token_ids_batch) {
+    
+    size_t batch_size = token_ids_batch.size();
+    std::vector<std::unique_ptr<Math::IMatrix>> embeddings(batch_size);
+    
+    // Parallel embedding lookup
+    #pragma omp parallel for schedule(dynamic)
+    for (size_t b = 0; b < batch_size; ++b) {
+        embeddings[b] = embed_tokens(token_ids_batch[b]);
+    }
+    
+    return embeddings;
+}
+
+std::unique_ptr<Math::IMatrix> Transformer::create_causal_mask(int seq_len) {
+    auto mask = Math::MatrixFactory::create(seq_len, seq_len, 0.0f);
+    
+    // Upper triangular mask (causal attention)
+    const float neg_inf = -1e9f;
+    
+    #pragma omp parallel for collapse(2)
+    for (int i = 0; i < seq_len; ++i) {
+        for (int j = 0; j < seq_len; ++j) {
+            if (j > i) {
+                mask->at(i, j) = neg_inf;  // Mask future positions
+            }
         }
-        for (int j = 0; j < d_model_; ++j) {
-            tgt_embeddings->at(i, j) = embedding_matrix_->at(tgt[i], j);
-        }
     }
     
-    // Encoder forward pass
-    auto encoder_output = std::move(src_embeddings);
-    for (auto& layer : encoder_layers_) {
-        encoder_output = layer->forward(*encoder_output, nullptr);
+    return mask;
+}
+
+std::unique_ptr<Math::IMatrix> Transformer::forward(
+    const std::vector<int>& token_ids) {
+    
+    size_t seq_len = token_ids.size();
+    
+    // 1. Embed tokens
+    auto x = embed_tokens(token_ids);
+    
+    // 2. Create causal mask
+    auto mask = create_causal_mask(seq_len);
+    
+    // 3. Pass through transformer layers
+    for (auto& layer : layers_) {
+        x = layer->forward(*x, mask.get());
     }
     
-    // Decoder forward pass
-    auto decoder_output = std::move(tgt_embeddings);
-    for (auto& layer : decoder_layers_) {
-        decoder_output = layer->forward(*decoder_output, *encoder_output, nullptr, nullptr);
-    }
+    // 4. Final layer norm
+    auto normed = final_norm_->forward(*x);
     
-    // Project to vocabulary
-    auto logits = decoder_output->matmul(*embedding_matrix_->transpose());
+    // 5. Project to vocabulary
+    auto logits = normed->matmul(*output_projection_);
     
     return logits;
 }
 
-void Transformer::save_weights(const std::string& path) {
-    // Basic implementation for saving model weights
-    // In a production system, this would serialize all weight matrices to a binary file
-    // For now, we provide a stub that can be extended
-    (void)path;  // Suppress unused parameter warning
-    throw std::runtime_error("Weight saving not yet fully implemented. Extend this method to serialize weights.");
-}
-
-void Transformer::load_weights(const std::string& path) {
-    // Basic implementation for loading model weights
-    // In a production system, this would deserialize weight matrices from a binary file
-    // For now, we provide a stub that can be extended
-    (void)path;  // Suppress unused parameter warning
-    throw std::runtime_error("Weight loading not yet fully implemented. Extend this method to deserialize weights.");
+std::vector<std::unique_ptr<Math::IMatrix>> Transformer::forward_batched(
+    const std::vector<std::vector<int>>& token_ids_batch) {
+    
+    if (token_ids_batch.empty()) {
+        return {};
+    }
+    
+    size_t batch_size = token_ids_batch.size();
+    size_t seq_len = token_ids_batch[0].size();
+    
+    // 1. Batched embedding
+    auto x_batch = embed_tokens_batched(token_ids_batch);
+    
+    // 2. Create causal mask (shared across batch)
+    auto mask = create_causal_mask(seq_len);
+    
+    // 3. Pass through transformer layers
+    std::vector<const Math::IMatrix*> x_ptrs(batch_size);
+    for (size_t i = 0; i < batch_size; ++i) {
+        x_ptrs[i] = x_batch[i].get();
+    }
+    
+    for (auto& layer : layers_) {
+        auto layer_outputs = layer->forward_batched(x_ptrs, mask.get());
+        
+        // Update x_batch with layer outputs
+        x_batch = std::move(layer_outputs);
+        
+        // Update pointers
+        for (size_t i = 0; i < batch_size; ++i) {
+            x_ptrs[i] = x_batch[i].get();
+        }
+    }
+    
+    // 4. Final layer norm (batched)
+    std::vector<std::unique_ptr<Math::IMatrix>> normed_batch(batch_size);
+    #pragma omp parallel for
+    for (size_t b = 0; b < batch_size; ++b) {
+        normed_batch[b] = final_norm_->forward(*x_batch[b]);
+    }
+    
+    // 5. Project to vocabulary (batched matrix multiply)
+    std::vector<const Math::IMatrix*> normed_ptrs(batch_size);
+    std::vector<const Math::IMatrix*> proj_ptrs(batch_size, output_projection_.get());
+    
+    for (size_t i = 0; i < batch_size; ++i) {
+        normed_ptrs[i] = normed_batch[i].get();
+    }
+    
+    auto logits_batch = Math::CPUMatrix::batch_matmul(normed_ptrs, proj_ptrs);
+    
+    return logits_batch;
 }
 
 } // namespace Transformer

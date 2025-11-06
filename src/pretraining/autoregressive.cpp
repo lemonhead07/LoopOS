@@ -1,6 +1,6 @@
 #include "pretraining/autoregressive.hpp"
 #include "math/cpu_matrix.hpp"
-#include "math/optimized_cpu_matrix.hpp"
+#include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
 #include "utils/benchmark.hpp"
 #include "utils/progress_bar.hpp"
@@ -22,7 +22,7 @@ AutoregressiveTrainer::AutoregressiveTrainer(
     Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_OPTIMIZED);
     
     // Create optimized transformer (with batching support)
-    model_ = std::make_unique<Transformer::OptimizedTransformer>(
+    model_ = std::make_unique<Transformer::Transformer>(
         d_model, num_heads, num_layers, d_ff, vocab_size, 512  // max_seq_len=512
     );
     

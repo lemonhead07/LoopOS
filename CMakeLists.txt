@@ -46,7 +46,6 @@ add_library(utils STATIC
 # Math Library (Abstracted Matrix Backend)
 add_library(math_backend STATIC
     src/math/cpu_matrix.cpp
-    src/math/optimized_cpu_matrix.cpp
     src/utils/thread_pool.cpp
     src/utils/memory_manager.cpp
     src/utils/benchmark.cpp
@@ -59,9 +58,6 @@ add_library(transformer STATIC
     src/transformer/feedforward.cpp
     src/transformer/layer_norm.cpp
     src/transformer/transformer.cpp
-    src/transformer/optimized_attention.cpp
-    src/transformer/optimized_feedforward.cpp
-    src/transformer/optimized_transformer.cpp
 )
 target_link_libraries(transformer math_backend utils)
 

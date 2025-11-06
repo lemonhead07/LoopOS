@@ -1,9 +1,14 @@
 #pragma once
 
-#include "attention.hpp"
+#include "../math/matrix_interface.hpp"
+#include <memory>
 
 namespace LoopOS {
 namespace Transformer {
+
+// Use abstracted matrix interface for optimizations
+using Matrix = Math::IMatrix;
+using MatrixPtr = std::unique_ptr<Math::IMatrix>;
 
 // Layer normalization (Ba et al., 2016)
 class LayerNorm {
