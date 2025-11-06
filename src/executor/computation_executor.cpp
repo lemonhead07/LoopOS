@@ -171,8 +171,14 @@ void ComputationExecutor::run_autoregressive() {
     logger_.info("Starting training...");
     logger_.info("");
     
+    // Use configured data loader parameters if provided, otherwise use defaults
+    int prefetch_batches = training_config.prefetch_batches.value_or(3);
+    int num_workers = training_config.num_workers.value_or(2);
+    bool shuffle = training_config.shuffle.value_or(true);
+    
     trainer.train_epoch(sequences, training_config.learning_rate, 
-                       training_config.num_epochs, true);
+                       training_config.num_epochs, true,
+                       prefetch_batches, num_workers, shuffle);
     
     logger_.info("");
     logger_.info("Training completed!");

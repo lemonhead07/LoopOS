@@ -312,6 +312,17 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                                         float learning_rate, 
                                         int num_epochs, 
                                         bool show_progress) {
+    // Call the extended version with default parameters
+    train_epoch(dataset, learning_rate, num_epochs, show_progress, 3, 2, true);
+}
+
+void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dataset, 
+                                        float learning_rate, 
+                                        int num_epochs, 
+                                        bool show_progress,
+                                        int prefetch_batches,
+                                        int num_workers,
+                                        bool shuffle) {
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
     
     // Adaptive batch sizing - starts small and finds optimal size
@@ -328,9 +339,9 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
     // Create data loader with prefetching enabled
     Utils::DataLoader::Config loader_config;
     loader_config.batch_size = current_batch_size;
-    loader_config.prefetch_batches = 3;  // Prefetch 3 batches ahead
-    loader_config.num_workers = 2;        // Use 2 worker threads
-    loader_config.shuffle = true;         // Shuffle each epoch
+    loader_config.prefetch_batches = prefetch_batches;
+    loader_config.num_workers = num_workers;
+    loader_config.shuffle = shuffle;
     loader_config.queue_capacity = 4;     // Allow up to 4 batches in queue
     
     Utils::DataLoader data_loader(dataset, loader_config);

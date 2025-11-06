@@ -45,6 +45,11 @@ struct TrainingConfig {
     std::optional<float> kl_coefficient;        // For RLHF
     std::optional<int> max_length;              // For generation
     
+    // Data loading optimization parameters
+    std::optional<int> prefetch_batches;        // Number of batches to prefetch (default: 3)
+    std::optional<int> num_workers;             // Number of worker threads (default: 2)
+    std::optional<bool> shuffle;                // Shuffle data each epoch (default: true)
+    
     static TrainingConfig from_json(const json& j);
 };
 
