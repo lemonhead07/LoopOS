@@ -1,14 +1,15 @@
 #include "pretraining/autoregressive.hpp"
 #include "math/cpu_matrix.hpp"
-#include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
 #include "utils/benchmark.hpp"
 #include "utils/progress_bar.hpp"
+#include "utils/serialization.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <chrono>
 
 namespace LoopOS {
 namespace PreTraining {
@@ -537,26 +538,152 @@ void AutoregressiveTrainer::save_checkpoint(const std::string& filepath) const {
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
     logger.info("Saving model checkpoint to: " + filepath);
     
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
     try {
         std::ofstream file(filepath, std::ios::binary);
         if (!file.is_open()) {
             throw std::runtime_error("Failed to open file for writing: " + filepath);
         }
         
-        // Write model architecture metadata
-        file.write(reinterpret_cast<const char*>(&d_model_), sizeof(d_model_));
-        file.write(reinterpret_cast<const char*>(&num_heads_), sizeof(num_heads_));
-        file.write(reinterpret_cast<const char*>(&num_layers_), sizeof(num_layers_));
-        file.write(reinterpret_cast<const char*>(&d_ff_), sizeof(d_ff_));
-        file.write(reinterpret_cast<const char*>(&vocab_size_), sizeof(vocab_size_));
+        // 1. Write header (magic number + version)
+        Utils::Serialization::write_header(file);
+        logger.debug("Written file header");
         
-        // Note: Actual weight saving would require serializing all matrices
-        // from the transformer layers. For now, we save the architecture metadata.
-        // TODO: Implement full weight serialization
+        // 2. Write architecture metadata
+        Utils::Serialization::ArchitectureMetadata metadata{
+            d_model_, num_heads_, num_layers_, d_ff_, vocab_size_, 
+            model_->get_max_seq_len()
+        };
+        Utils::Serialization::write_metadata(file, metadata);
+        logger.debug("Written architecture metadata");
+        
+        // 3. Write token embeddings
+        const auto* token_emb = model_->get_token_embedding();
+        if (!token_emb) {
+            throw std::runtime_error("Token embedding is null");
+        }
+        Utils::Serialization::write_matrix(file, *token_emb);
+        logger.debug("Written token embeddings (" + 
+                    std::to_string(token_emb->rows()) + "x" + 
+                    std::to_string(token_emb->cols()) + ")");
+        
+        // 4. Write position embeddings
+        const auto* pos_emb = model_->get_position_embedding();
+        if (!pos_emb) {
+            throw std::runtime_error("Position embedding is null");
+        }
+        Utils::Serialization::write_matrix(file, *pos_emb);
+        logger.debug("Written position embeddings (" + 
+                    std::to_string(pos_emb->rows()) + "x" + 
+                    std::to_string(pos_emb->cols()) + ")");
+        
+        // 5. Write all transformer layers
+        for (int layer_idx = 0; layer_idx < num_layers_; ++layer_idx) {
+            const auto* layer = model_->get_layer(layer_idx);
+            if (!layer) {
+                throw std::runtime_error("Layer " + std::to_string(layer_idx) + " is null");
+            }
+            
+            // 5a. Write attention weights
+            const auto* attention = layer->get_attention();
+            if (!attention) {
+                throw std::runtime_error("Attention in layer " + std::to_string(layer_idx) + " is null");
+            }
+            
+            const auto* W_qkv = attention->get_W_qkv();
+            const auto* W_o = attention->get_W_o();
+            if (!W_qkv || !W_o) {
+                throw std::runtime_error("Attention weights in layer " + std::to_string(layer_idx) + " are null");
+            }
+            
+            Utils::Serialization::write_matrix(file, *W_qkv);
+            Utils::Serialization::write_matrix(file, *W_o);
+            
+            // 5b. Write feedforward weights
+            const auto* feedforward = layer->get_feedforward();
+            if (!feedforward) {
+                throw std::runtime_error("Feedforward in layer " + std::to_string(layer_idx) + " is null");
+            }
+            
+            const auto* W1 = feedforward->get_W1();
+            const auto* b1 = feedforward->get_b1();
+            const auto* W2 = feedforward->get_W2();
+            const auto* b2 = feedforward->get_b2();
+            if (!W1 || !b1 || !W2 || !b2) {
+                throw std::runtime_error("Feedforward weights in layer " + std::to_string(layer_idx) + " are null");
+            }
+            
+            Utils::Serialization::write_matrix(file, *W1);
+            Utils::Serialization::write_matrix(file, *b1);
+            Utils::Serialization::write_matrix(file, *W2);
+            Utils::Serialization::write_matrix(file, *b2);
+            
+            // 5c. Write layer norm parameters
+            const auto* norm1 = layer->get_norm1();
+            const auto* norm2 = layer->get_norm2();
+            if (!norm1 || !norm2) {
+                throw std::runtime_error("Layer norms in layer " + std::to_string(layer_idx) + " are null");
+            }
+            
+            const auto* norm1_gamma = norm1->get_gamma();
+            const auto* norm1_beta = norm1->get_beta();
+            const auto* norm2_gamma = norm2->get_gamma();
+            const auto* norm2_beta = norm2->get_beta();
+            if (!norm1_gamma || !norm1_beta || !norm2_gamma || !norm2_beta) {
+                throw std::runtime_error("Layer norm parameters in layer " + std::to_string(layer_idx) + " are null");
+            }
+            
+            Utils::Serialization::write_matrix(file, *norm1_gamma);
+            Utils::Serialization::write_matrix(file, *norm1_beta);
+            Utils::Serialization::write_matrix(file, *norm2_gamma);
+            Utils::Serialization::write_matrix(file, *norm2_beta);
+            
+            logger.debug("Written layer " + std::to_string(layer_idx) + " weights");
+        }
+        
+        // 6. Write final layer norm
+        const auto* final_norm = model_->get_final_norm();
+        if (!final_norm) {
+            throw std::runtime_error("Final layer norm is null");
+        }
+        
+        const auto* final_gamma = final_norm->get_gamma();
+        const auto* final_beta = final_norm->get_beta();
+        if (!final_gamma || !final_beta) {
+            throw std::runtime_error("Final layer norm parameters are null");
+        }
+        
+        Utils::Serialization::write_matrix(file, *final_gamma);
+        Utils::Serialization::write_matrix(file, *final_beta);
+        logger.debug("Written final layer norm");
+        
+        // 7. Write output projection
+        const auto* output_proj = model_->get_output_projection();
+        if (!output_proj) {
+            throw std::runtime_error("Output projection is null");
+        }
+        Utils::Serialization::write_matrix(file, *output_proj);
+        logger.debug("Written output projection (" + 
+                    std::to_string(output_proj->rows()) + "x" + 
+                    std::to_string(output_proj->cols()) + ")");
         
         file.close();
-        logger.info("Model checkpoint saved successfully");
-        logger.info("Note: Full weight serialization not yet implemented");
+        
+        // Calculate file size and save time
+        size_t file_size = Utils::Serialization::get_file_size(filepath);
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        
+        // Compute checksum for validation
+        uint32_t checksum = Utils::Serialization::compute_checksum(filepath);
+        
+        std::ostringstream oss;
+        oss << "Model checkpoint saved successfully - "
+            << "Size: " << (file_size / (1024.0 * 1024.0)) << " MB, "
+            << "Time: " << duration_ms << " ms, "
+            << "Checksum: 0x" << std::hex << checksum;
+        logger.info(oss.str());
         
     } catch (const std::exception& e) {
         logger.error("Failed to save checkpoint: " + std::string(e.what()));
@@ -568,33 +695,173 @@ void AutoregressiveTrainer::load_checkpoint(const std::string& filepath) {
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
     logger.info("Loading model checkpoint from: " + filepath);
     
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
     try {
         std::ifstream file(filepath, std::ios::binary);
         if (!file.is_open()) {
             throw std::runtime_error("Failed to open file for reading: " + filepath);
         }
         
-        // Read model architecture metadata
-        int loaded_d_model, loaded_num_heads, loaded_num_layers, loaded_d_ff, loaded_vocab_size;
-        file.read(reinterpret_cast<char*>(&loaded_d_model), sizeof(loaded_d_model));
-        file.read(reinterpret_cast<char*>(&loaded_num_heads), sizeof(loaded_num_heads));
-        file.read(reinterpret_cast<char*>(&loaded_num_layers), sizeof(loaded_num_layers));
-        file.read(reinterpret_cast<char*>(&loaded_d_ff), sizeof(loaded_d_ff));
-        file.read(reinterpret_cast<char*>(&loaded_vocab_size), sizeof(loaded_vocab_size));
+        // 1. Read and validate header
+        uint32_t version = Utils::Serialization::read_header(file);
+        logger.debug("Read file header, version: " + std::to_string(version));
         
-        // Verify architecture matches
-        if (loaded_d_model != d_model_ || loaded_num_heads != num_heads_ ||
-            loaded_num_layers != num_layers_ || loaded_d_ff != d_ff_ ||
-            loaded_vocab_size != vocab_size_) {
-            throw std::runtime_error("Model architecture mismatch. Cannot load checkpoint.");
+        // 2. Read and validate architecture metadata
+        auto metadata = Utils::Serialization::read_metadata(file);
+        
+        if (metadata.d_model != d_model_ || metadata.num_heads != num_heads_ ||
+            metadata.num_layers != num_layers_ || metadata.d_ff != d_ff_ ||
+            metadata.vocab_size != vocab_size_) {
+            std::ostringstream oss;
+            oss << "Model architecture mismatch!\n"
+                << "  Expected: d_model=" << d_model_ << ", num_heads=" << num_heads_
+                << ", num_layers=" << num_layers_ << ", d_ff=" << d_ff_
+                << ", vocab_size=" << vocab_size_ << "\n"
+                << "  Found: d_model=" << metadata.d_model << ", num_heads=" << metadata.num_heads
+                << ", num_layers=" << metadata.num_layers << ", d_ff=" << metadata.d_ff
+                << ", vocab_size=" << metadata.vocab_size;
+            throw std::runtime_error(oss.str());
+        }
+        logger.debug("Architecture metadata validated");
+        
+        // 3. Read token embeddings
+        auto token_dims = Utils::Serialization::read_matrix_dims(file);
+        auto token_emb = Math::MatrixFactory::create(token_dims.first, token_dims.second);
+        Utils::Serialization::read_matrix(file, *token_emb);
+        model_->set_token_embedding(std::move(token_emb));
+        logger.debug("Loaded token embeddings (" + 
+                    std::to_string(token_dims.first) + "x" + 
+                    std::to_string(token_dims.second) + ")");
+        
+        // 4. Read position embeddings
+        auto pos_dims = Utils::Serialization::read_matrix_dims(file);
+        auto pos_emb = Math::MatrixFactory::create(pos_dims.first, pos_dims.second);
+        Utils::Serialization::read_matrix(file, *pos_emb);
+        model_->set_position_embedding(std::move(pos_emb));
+        logger.debug("Loaded position embeddings (" + 
+                    std::to_string(pos_dims.first) + "x" + 
+                    std::to_string(pos_dims.second) + ")");
+        
+        // 5. Read all transformer layers
+        for (int layer_idx = 0; layer_idx < num_layers_; ++layer_idx) {
+            auto* layer = model_->get_layer(layer_idx);
+            if (!layer) {
+                throw std::runtime_error("Layer " + std::to_string(layer_idx) + " is null");
+            }
+            
+            // 5a. Read attention weights
+            auto* attention = const_cast<Transformer::MultiHeadAttention*>(layer->get_attention());
+            if (!attention) {
+                throw std::runtime_error("Attention in layer " + std::to_string(layer_idx) + " is null");
+            }
+            
+            auto W_qkv_dims = Utils::Serialization::read_matrix_dims(file);
+            auto W_qkv = Math::MatrixFactory::create(W_qkv_dims.first, W_qkv_dims.second);
+            Utils::Serialization::read_matrix(file, *W_qkv);
+            attention->set_W_qkv(std::move(W_qkv));
+            
+            auto W_o_dims = Utils::Serialization::read_matrix_dims(file);
+            auto W_o = Math::MatrixFactory::create(W_o_dims.first, W_o_dims.second);
+            Utils::Serialization::read_matrix(file, *W_o);
+            attention->set_W_o(std::move(W_o));
+            
+            // 5b. Read feedforward weights
+            auto* feedforward = const_cast<Transformer::FeedForward*>(layer->get_feedforward());
+            if (!feedforward) {
+                throw std::runtime_error("Feedforward in layer " + std::to_string(layer_idx) + " is null");
+            }
+            
+            auto W1_dims = Utils::Serialization::read_matrix_dims(file);
+            auto W1 = Math::MatrixFactory::create(W1_dims.first, W1_dims.second);
+            Utils::Serialization::read_matrix(file, *W1);
+            feedforward->set_W1(std::move(W1));
+            
+            auto b1_dims = Utils::Serialization::read_matrix_dims(file);
+            auto b1 = Math::MatrixFactory::create(b1_dims.first, b1_dims.second);
+            Utils::Serialization::read_matrix(file, *b1);
+            feedforward->set_b1(std::move(b1));
+            
+            auto W2_dims = Utils::Serialization::read_matrix_dims(file);
+            auto W2 = Math::MatrixFactory::create(W2_dims.first, W2_dims.second);
+            Utils::Serialization::read_matrix(file, *W2);
+            feedforward->set_W2(std::move(W2));
+            
+            auto b2_dims = Utils::Serialization::read_matrix_dims(file);
+            auto b2 = Math::MatrixFactory::create(b2_dims.first, b2_dims.second);
+            Utils::Serialization::read_matrix(file, *b2);
+            feedforward->set_b2(std::move(b2));
+            
+            // 5c. Read layer norm parameters
+            auto* norm1 = layer->get_norm1();
+            auto* norm2 = layer->get_norm2();
+            if (!norm1 || !norm2) {
+                throw std::runtime_error("Layer norms in layer " + std::to_string(layer_idx) + " are null");
+            }
+            
+            auto norm1_gamma_dims = Utils::Serialization::read_matrix_dims(file);
+            auto norm1_gamma = Math::MatrixFactory::create(norm1_gamma_dims.first, norm1_gamma_dims.second);
+            Utils::Serialization::read_matrix(file, *norm1_gamma);
+            norm1->set_gamma(std::move(norm1_gamma));
+            
+            auto norm1_beta_dims = Utils::Serialization::read_matrix_dims(file);
+            auto norm1_beta = Math::MatrixFactory::create(norm1_beta_dims.first, norm1_beta_dims.second);
+            Utils::Serialization::read_matrix(file, *norm1_beta);
+            norm1->set_beta(std::move(norm1_beta));
+            
+            auto norm2_gamma_dims = Utils::Serialization::read_matrix_dims(file);
+            auto norm2_gamma = Math::MatrixFactory::create(norm2_gamma_dims.first, norm2_gamma_dims.second);
+            Utils::Serialization::read_matrix(file, *norm2_gamma);
+            norm2->set_gamma(std::move(norm2_gamma));
+            
+            auto norm2_beta_dims = Utils::Serialization::read_matrix_dims(file);
+            auto norm2_beta = Math::MatrixFactory::create(norm2_beta_dims.first, norm2_beta_dims.second);
+            Utils::Serialization::read_matrix(file, *norm2_beta);
+            norm2->set_beta(std::move(norm2_beta));
+            
+            logger.debug("Loaded layer " + std::to_string(layer_idx) + " weights");
         }
         
-        // Note: Actual weight loading would deserialize all matrices
-        // TODO: Implement full weight deserialization
+        // 6. Read final layer norm
+        auto* final_norm = model_->get_final_norm();
+        if (!final_norm) {
+            throw std::runtime_error("Final layer norm is null");
+        }
+        
+        auto final_gamma_dims = Utils::Serialization::read_matrix_dims(file);
+        auto final_gamma = Math::MatrixFactory::create(final_gamma_dims.first, final_gamma_dims.second);
+        Utils::Serialization::read_matrix(file, *final_gamma);
+        final_norm->set_gamma(std::move(final_gamma));
+        
+        auto final_beta_dims = Utils::Serialization::read_matrix_dims(file);
+        auto final_beta = Math::MatrixFactory::create(final_beta_dims.first, final_beta_dims.second);
+        Utils::Serialization::read_matrix(file, *final_beta);
+        final_norm->set_beta(std::move(final_beta));
+        logger.debug("Loaded final layer norm");
+        
+        // 7. Read output projection
+        auto output_dims = Utils::Serialization::read_matrix_dims(file);
+        auto output_proj = Math::MatrixFactory::create(output_dims.first, output_dims.second);
+        Utils::Serialization::read_matrix(file, *output_proj);
+        model_->set_output_projection(std::move(output_proj));
+        logger.debug("Loaded output projection (" + 
+                    std::to_string(output_dims.first) + "x" + 
+                    std::to_string(output_dims.second) + ")");
         
         file.close();
-        logger.info("Model checkpoint loaded successfully");
-        logger.info("Note: Full weight deserialization not yet implemented");
+        
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        
+        size_t file_size = Utils::Serialization::get_file_size(filepath);
+        uint32_t checksum = Utils::Serialization::compute_checksum(filepath);
+        
+        std::ostringstream oss;
+        oss << "Model checkpoint loaded successfully - "
+            << "Size: " << (file_size / (1024.0 * 1024.0)) << " MB, "
+            << "Time: " << duration_ms << " ms, "
+            << "Checksum: 0x" << std::hex << checksum;
+        logger.info(oss.str());
         
     } catch (const std::exception& e) {
         logger.error("Failed to load checkpoint: " + std::string(e.what()));

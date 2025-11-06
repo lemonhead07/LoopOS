@@ -36,6 +36,12 @@ public:
     const LayerNorm* get_norm1() const { return norm1_.get(); }
     const LayerNorm* get_norm2() const { return norm2_.get(); }
     
+    // Non-const accessors for deserialization
+    MultiHeadAttention* get_attention() { return attention_.get(); }
+    FeedForward* get_feedforward() { return feedforward_.get(); }
+    LayerNorm* get_norm1() { return norm1_.get(); }
+    LayerNorm* get_norm2() { return norm2_.get(); }
+    
 private:
     int d_model_;
     int num_heads_;
@@ -92,6 +98,12 @@ public:
     int get_d_ff() const { return d_ff_; }
     int get_vocab_size() const { return vocab_size_; }
     int get_max_seq_len() const { return max_seq_len_; }
+    
+    // Non-const accessors for deserialization
+    TransformerLayer* get_layer(int idx) { 
+        return (idx >= 0 && idx < static_cast<int>(layers_.size())) ? layers_[idx].get() : nullptr;
+    }
+    LayerNorm* get_final_norm() { return final_norm_.get(); }
     
     // Weight setters for deserialization
     void set_token_embedding(std::unique_ptr<Math::IMatrix> emb) { token_embedding_ = std::move(emb); }
