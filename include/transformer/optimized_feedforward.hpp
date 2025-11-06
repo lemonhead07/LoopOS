@@ -20,6 +20,18 @@ public:
     std::vector<std::unique_ptr<Math::IMatrix>> forward_batched(
         const std::vector<const Math::IMatrix*>& input_batch);
     
+    // Weight accessors for serialization
+    const Math::IMatrix* get_W1() const { return W1_.get(); }
+    const Math::IMatrix* get_b1() const { return b1_.get(); }
+    const Math::IMatrix* get_W2() const { return W2_.get(); }
+    const Math::IMatrix* get_b2() const { return b2_.get(); }
+    
+    // Weight setters for deserialization
+    void set_W1(std::unique_ptr<Math::IMatrix> W1) { W1_ = std::move(W1); }
+    void set_b1(std::unique_ptr<Math::IMatrix> b1) { b1_ = std::move(b1); }
+    void set_W2(std::unique_ptr<Math::IMatrix> W2) { W2_ = std::move(W2); }
+    void set_b2(std::unique_ptr<Math::IMatrix> b2) { b2_ = std::move(b2); }
+    
 private:
     int d_model_;
     int d_ff_;

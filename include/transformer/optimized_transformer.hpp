@@ -30,6 +30,12 @@ public:
         const std::vector<const Math::IMatrix*>& x_batch,
         const Math::IMatrix* mask = nullptr);
     
+    // Component accessors for serialization
+    const OptimizedMultiHeadAttention* get_attention() const { return attention_.get(); }
+    const OptimizedFeedForward* get_feedforward() const { return feedforward_.get(); }
+    const LayerNorm* get_norm1() const { return norm1_.get(); }
+    const LayerNorm* get_norm2() const { return norm2_.get(); }
+    
 private:
     int d_model_;
     int num_heads_;
@@ -71,6 +77,26 @@ public:
     
     // Generate causal mask for autoregressive modeling
     std::unique_ptr<Math::IMatrix> create_causal_mask(int seq_len);
+    
+    // Model component accessors for serialization
+    const Math::IMatrix* get_token_embedding() const { return token_embedding_.get(); }
+    const Math::IMatrix* get_position_embedding() const { return position_embedding_.get(); }
+    const OptimizedTransformerLayer* get_layer(int idx) const { 
+        return (idx >= 0 && idx < static_cast<int>(layers_.size())) ? layers_[idx].get() : nullptr;
+    }
+    const LayerNorm* get_final_norm() const { return final_norm_.get(); }
+    const Math::IMatrix* get_output_projection() const { return output_projection_.get(); }
+    int get_num_layers() const { return num_layers_; }
+    int get_d_model() const { return d_model_; }
+    int get_num_heads() const { return num_heads_; }
+    int get_d_ff() const { return d_ff_; }
+    int get_vocab_size() const { return vocab_size_; }
+    int get_max_seq_len() const { return max_seq_len_; }
+    
+    // Weight setters for deserialization
+    void set_token_embedding(std::unique_ptr<Math::IMatrix> emb) { token_embedding_ = std::move(emb); }
+    void set_position_embedding(std::unique_ptr<Math::IMatrix> emb) { position_embedding_ = std::move(emb); }
+    void set_output_projection(std::unique_ptr<Math::IMatrix> proj) { output_projection_ = std::move(proj); }
     
 private:
     int d_model_;

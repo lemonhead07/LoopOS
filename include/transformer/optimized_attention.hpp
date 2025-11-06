@@ -58,6 +58,14 @@ public:
     // Create a new KV cache for this attention layer
     std::unique_ptr<KVCache> create_cache(size_t max_length) const;
     
+    // Weight accessors for serialization
+    const Math::IMatrix* get_W_qkv() const { return W_qkv_.get(); }
+    const Math::IMatrix* get_W_o() const { return W_o_.get(); }
+    
+    // Weight setters for deserialization
+    void set_W_qkv(std::unique_ptr<Math::IMatrix> W_qkv) { W_qkv_ = std::move(W_qkv); }
+    void set_W_o(std::unique_ptr<Math::IMatrix> W_o) { W_o_ = std::move(W_o); }
+    
 private:
     int d_model_;
     int num_heads_;

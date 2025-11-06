@@ -12,6 +12,14 @@ public:
     
     MatrixPtr forward(const Matrix& x);
     
+    // Weight accessors for serialization
+    const Matrix* get_gamma() const { return gamma_.get(); }
+    const Matrix* get_beta() const { return beta_.get(); }
+    
+    // Weight setters for deserialization
+    void set_gamma(MatrixPtr gamma) { gamma_ = std::move(gamma); }
+    void set_beta(MatrixPtr beta) { beta_ = std::move(beta); }
+    
 private:
     int normalized_shape_;
     float eps_;
