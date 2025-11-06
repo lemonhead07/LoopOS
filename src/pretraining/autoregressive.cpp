@@ -444,10 +444,9 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                         size_t new_batch_size = std::min(current_batch_size * 2, MAX_BATCH_SIZE);
                         if (new_batch_size != current_batch_size) {
                             current_batch_size = new_batch_size;
-                            // Update data loader config
-                            loader_config.batch_size = current_batch_size;
+                            // Note: This affects OpenMP parallel processing, not DataLoader batch size
                             if (!show_progress) {
-                                logger.debug("Increasing batch size to " + std::to_string(current_batch_size) + 
+                                logger.debug("Increasing OpenMP batch size to " + std::to_string(current_batch_size) + 
                                            " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
                             }
                         }
@@ -458,10 +457,9 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                         size_t new_batch_size = std::max(current_batch_size / 2, MIN_BATCH_SIZE);
                         if (new_batch_size != current_batch_size) {
                             current_batch_size = new_batch_size;
-                            // Update data loader config
-                            loader_config.batch_size = current_batch_size;
+                            // Note: This affects OpenMP parallel processing, not DataLoader batch size
                             if (!show_progress) {
-                                logger.debug("Decreasing batch size to " + std::to_string(current_batch_size) + 
+                                logger.debug("Decreasing OpenMP batch size to " + std::to_string(current_batch_size) + 
                                            " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
                             }
                         }
