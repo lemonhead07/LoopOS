@@ -1,4 +1,5 @@
 #include "transformer/feedforward.hpp"
+#include "utils/profiler.hpp"
 #include "math/cpu_matrix.hpp"
 #include <cmath>
 #include <stdexcept>

@@ -1,4 +1,5 @@
 #include "pretraining/autoregressive.hpp"
+#include "utils/profiler.hpp"
 #include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
 #include "utils/benchmark.hpp"
@@ -443,22 +444,24 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 logger.debug(timing_oss.str());
             }
             
-            // Debug trail - log to file every 100 batches (doesn't interfere with display)
+            // Debug trail - log to file only (doesn't interfere with progress bar display)
             if (show_progress && ((batch_end % 100 == 0) || (batch_end == dataset.size()))) {
                 double batch_speedup = batch_total_time / actual_batch_time_ms;
                 double batch_throughput = (batch_tokens * 1000.0) / actual_batch_time_ms;
                 float avg_loss = epoch_loss / batch_end;
                 double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
                 
-                std::ostringstream debug_oss;
-                debug_oss << std::fixed << std::setprecision(2);
-                debug_oss << "Progress: " << batch_end << "/" << dataset.size() 
-                          << " (" << (batch_end * 100.0 / dataset.size()) << "%) | "
-                          << "Loss: " << avg_loss << " | "
-                          << "Throughput: " << avg_tokens_per_sec << " tok/s | "
-                          << "Batch: " << current_batch_size << " | "
-                          << "Speedup: " << batch_speedup << "x";
-                logger.debug(debug_oss.str());
+                // Note: Debug logging disabled during progress bar to avoid interfering with display
+                // The metrics are shown in the real-time display instead
+                // std::ostringstream debug_oss;
+                // debug_oss << std::fixed << std::setprecision(2);
+                // debug_oss << "Progress: " << batch_end << "/" << dataset.size() 
+                //           << " (" << (batch_end * 100.0 / dataset.size()) << "%) | "
+                //           << "Loss: " << avg_loss << " | "
+                //           << "Throughput: " << avg_tokens_per_sec << " tok/s | "
+                //           << "Batch: " << current_batch_size << " | "
+                //           << "Speedup: " << batch_speedup << "x";
+                // logger.debug(debug_oss.str());
             }
             
             // Update progress bar and metrics display (only every 10 batches or at end)

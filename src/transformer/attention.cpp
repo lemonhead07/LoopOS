@@ -1,4 +1,5 @@
 #include "transformer/attention.hpp"
+#include "utils/profiler.hpp"
 #include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
 #include <cmath>

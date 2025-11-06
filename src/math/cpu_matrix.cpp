@@ -1,4 +1,5 @@
 #include "math/cpu_matrix.hpp"
+#include "utils/profiler.hpp"
 #include "utils/thread_pool.hpp"
 #include "utils/logger.hpp"
 #include <cmath>

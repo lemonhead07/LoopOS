@@ -15,16 +15,23 @@ set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 # Enable AVX2/AVX512 if available
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mfma")
-    # Try AVX512 if available
-    include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512)
-    if(COMPILER_SUPPORTS_AVX512)
-        # Enable full AVX-512 instruction set for Tiger Lake (11th gen Intel)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512f -mavx512dq -mavx512bw -mavx512vl -mavx512cd -mavx512vnni -mavx512vbmi -mavx512vbmi2")
-        add_definitions(-DHAVE_AVX512)
-        message(STATUS "AVX-512 enabled with full instruction set")
-    endif()
     add_definitions(-DHAVE_AVX2)
+    message(STATUS "AVX2 enabled")
+    
+    # Note: AVX-512 requires runtime CPU detection
+    # Disabled by default to avoid illegal instruction on CPUs without AVX-512
+    # To enable, set -DENABLE_AVX512=ON during cmake
+    option(ENABLE_AVX512 "Enable AVX-512 instructions" OFF)
+    
+    if(ENABLE_AVX512)
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512)
+        if(COMPILER_SUPPORTS_AVX512)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512f -mavx512dq -mavx512bw -mavx512vl -mavx512cd")
+            add_definitions(-DHAVE_AVX512)
+            message(STATUS "AVX-512 enabled (ensure your CPU supports it!)")
+        endif()
+    endif()
 endif()
 
 # Set default build type to Release for performance
@@ -35,12 +42,13 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Utilities (Logger, Tokenizer, Sampling, Serialization)
+# Utilities (Logger, Tokenizer, Sampling, Serialization, Profiler)
 add_library(utils STATIC
     src/utils/logger.cpp
     src/utils/tokenizer.cpp
     src/utils/sampling.cpp
     src/utils/serialization.cpp
+    src/utils/profiler.cpp
 )
 
 # Math Library (Abstracted Matrix Backend)
