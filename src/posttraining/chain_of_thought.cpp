@@ -1,5 +1,6 @@
 #include "posttraining/chain_of_thought.hpp"
 #include "math/cpu_matrix.hpp"
+#include "utils/logger.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <sstream>
@@ -81,6 +82,12 @@ void ChainOfThought::train_step(
     // Train on the full reasoning chain
     if (full_sequence.size() > 1) {
         auto logits = model_->forward(full_sequence, full_sequence);
+        
+        // Log the training step for monitoring
+        Utils::ModuleLogger logger("CHAIN_OF_THOUGHT");
+        logger.debug("Training step - Sequence length: " + std::to_string(full_sequence.size()) + 
+                     ", Reasoning steps: " + std::to_string(reasoning_steps.size()) + 
+                     ", Learning rate: " + std::to_string(learning_rate));
         
         // In a real implementation, this would:
         // 1. Compute loss on reasoning steps and answer

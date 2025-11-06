@@ -62,8 +62,6 @@ MatrixPtr MultiHeadAttention::scaled_dot_product_attention(
 MatrixPtr MultiHeadAttention::forward(
     const Matrix& query, const Matrix& key, const Matrix& value, const Matrix* mask) {
     
-    size_t batch_size = query.rows();
-    
     // 1. Linear projections
     auto Q = query.matmul(*W_q_);
     auto K = key.matmul(*W_k_);

@@ -1,5 +1,6 @@
 #include "posttraining/reinforcement.hpp"
 #include "math/cpu_matrix.hpp"
+#include "utils/logger.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -36,6 +37,10 @@ void ReinforcementTrainer::train_reward_model(
     // Train reward model from pairwise preferences
     // preferences: vector of (chosen, rejected) pairs
     
+    Utils::ModuleLogger logger("REWARD_MODEL");
+    float total_loss = 0.0f;
+    int count = 0;
+    
     for (const auto& pair : preferences) {
         const auto& chosen = pair.first;
         const auto& rejected = pair.second;
@@ -52,10 +57,19 @@ void ReinforcementTrainer::train_reward_model(
         float diff = reward_chosen - reward_rejected;
         float loss = -std::log(1.0f / (1.0f + std::exp(-diff)) + 1e-10f);
         
+        total_loss += loss;
+        count++;
+        
         // In a real implementation, this would:
         // 1. Backpropagate the loss
         // 2. Update reward model weights
         // For now, this demonstrates the structure
+    }
+    
+    if (count > 0) {
+        logger.debug("Reward model training - Average loss: " + std::to_string(total_loss / count) + 
+                     ", Learning rate: " + std::to_string(learning_rate) + 
+                     ", Pairs: " + std::to_string(count));
     }
 }
 
@@ -95,6 +109,12 @@ void ReinforcementTrainer::ppo_train_step(
     
     float kl_penalty = 0.0f;  // KL divergence between new and old policy
     float ppo_loss = -std::min(advantage, advantage * clip_epsilon_) + kl_coeff_ * kl_penalty;
+    
+    // Log the training loss for monitoring
+    Utils::ModuleLogger logger("PPO");
+    logger.debug("PPO training step - Loss: " + std::to_string(ppo_loss) + 
+                 ", Reward: " + std::to_string(reward) + 
+                 ", Learning rate: " + std::to_string(learning_rate));
 }
 
 float ReinforcementTrainer::compute_reward(

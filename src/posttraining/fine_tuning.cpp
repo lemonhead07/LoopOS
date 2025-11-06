@@ -1,5 +1,6 @@
 #include "posttraining/fine_tuning.hpp"
 #include "math/cpu_matrix.hpp"
+#include "utils/logger.hpp"
 #include <cmath>
 #include <stdexcept>
 
@@ -51,6 +52,11 @@ void FineTuner::train_step(
     
     // Compute classification loss
     float loss = compute_classification_loss(input_ids, label);
+    
+    // Log the training loss for monitoring
+    Utils::ModuleLogger logger("FINE_TUNING");
+    logger.debug("Training step - Loss: " + std::to_string(loss) + 
+                 ", Learning rate: " + std::to_string(learning_rate));
     
     // In a real implementation, this would:
     // 1. Compute gradients via backpropagation
