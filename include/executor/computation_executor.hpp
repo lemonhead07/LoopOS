@@ -3,6 +3,8 @@
 #include "config/configuration.hpp"
 #include "utils/logger.hpp"
 #include <memory>
+#include <vector>
+#include <string>
 
 namespace LoopOS {
 namespace Executor {
@@ -34,6 +36,11 @@ private:
     void run_fine_tuning();
     void run_chain_of_thought();
     void run_rlhf();
+    
+    // Helper methods
+    std::vector<std::vector<int>> tokenize_file(const std::string& filename, int vocab_size);
+    void ensure_output_directory(const std::string& output_dir);
+    void show_progress(int current, int total, float loss);
 };
 
 } // namespace Executor
