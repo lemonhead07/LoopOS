@@ -12,16 +12,34 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -mtune=native -funroll-loops -ffast-math")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
-# Enable AVX2 with runtime detection for AVX-512
+# Enable AVX2 with optional AVX-512 for high-performance systems
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+    # AVX2 is always enabled (safe on all modern CPUs from 2013+)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mfma")
     add_definitions(-DHAVE_AVX2)
     message(STATUS "AVX2 enabled")
     
-    # Note: AVX-512 support is detected at runtime via CPUFeatures
-    # Code paths will check CPUFeatures::has_avx512_full() before using AVX-512
-    # To compile specific AVX-512 functions, use __attribute__((target("avx512f")))
-    message(STATUS "AVX-512 runtime detection enabled (use function multiversioning for AVX-512 optimizations)")
+    # AVX-512 option for high-performance builds
+    # Usage: cmake -DENABLE_AVX512=ON ..
+    option(ENABLE_AVX512 "Enable AVX-512 instructions (requires compatible CPU)" OFF)
+    
+    if(ENABLE_AVX512)
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512)
+        if(COMPILER_SUPPORTS_AVX512)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512f -mavx512dq -mavx512bw -mavx512vl -mavx512cd")
+            add_definitions(-DHAVE_AVX512)
+            message(STATUS "AVX-512 enabled (requires CPU with AVX-512 support)")
+            message(STATUS "Compatible CPUs: Intel Skylake-X+, Ice Lake+, Sapphire Rapids, AMD Zen 4+")
+        else()
+            message(WARNING "AVX-512 requested but compiler doesn't support it")
+        endif()
+    else()
+        message(STATUS "AVX-512 disabled (use -DENABLE_AVX512=ON to enable)")
+    endif()
+    
+    # Runtime CPU detection via CPUFeatures class
+    message(STATUS "Runtime CPU feature detection enabled")
 endif()
 
 # Set default build type to Release for performance

@@ -1,0 +1,27 @@
+[2025-11-06 13:57:38] [INFO    ] [MAIN] === LoopOS Transformer Framework ===
+[2025-11-06 13:57:38] [INFO    ] [MAIN] Starting system initialization...
+
+[2025-11-06 13:57:38] [INFO    ] [MAIN] Detecting CPU SIMD capabilities...
+[2025-11-06 13:57:38] [INFO    ] [MAIN] CPU Features: SSE SSE2 SSE3 SSSE3 SSE4.1 SSE4.2 AVX AVX2 FMA
+[2025-11-06 13:57:38] [INFO    ] [MAIN] AVX2 supported - using AVX2 optimizations
+[2025-11-06 13:57:38] [INFO    ] [MAIN] 
+[2025-11-06 13:57:38] [INFO    ] [MAIN] Running hardware detection modules...
+[2025-11-06 13:57:38] [INFO    ] [CPU_DETECTOR] Starting CPU detection...
+[2025-11-06 13:57:38] [INFO    ] [CPU_DETECTOR] Checking CPU features...
+[2025-11-06 13:57:38] [INFO    ] [CPU_DETECTOR] CPU detection complete
+[2025-11-06 13:57:38] [INFO    ] [CPU_DETECTOR] 
+=== CPU Information ===
+Vendor: AMD
+Model: AMD EPYC 7763 64-Core Processor
+Architecture: Unknown
+Cores: 2 (Physical)
+Threads: 4 (Logical)
+Frequency: 3.24 GHz (current)
+  Min: 0.00 GHz
+  Max: 0.00 GHz
+Cache:
+  L1: 32 KB
+  L2: 512 KB
+  L3: 512 KB
+BogoMIPS: 4890
+Features: SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, AVX, AVX2, HyperThreading
