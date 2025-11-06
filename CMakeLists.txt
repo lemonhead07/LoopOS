@@ -12,26 +12,16 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -mtune=native -funroll-loops -ffast-math")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
-# Enable AVX2/AVX512 if available
+# Enable AVX2 with runtime detection for AVX-512
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mfma")
     add_definitions(-DHAVE_AVX2)
     message(STATUS "AVX2 enabled")
     
-    # Note: AVX-512 requires runtime CPU detection
-    # Disabled by default to avoid illegal instruction on CPUs without AVX-512
-    # To enable, set -DENABLE_AVX512=ON during cmake
-    option(ENABLE_AVX512 "Enable AVX-512 instructions" OFF)
-    
-    if(ENABLE_AVX512)
-        include(CheckCXXCompilerFlag)
-        check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512)
-        if(COMPILER_SUPPORTS_AVX512)
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512f -mavx512dq -mavx512bw -mavx512vl -mavx512cd")
-            add_definitions(-DHAVE_AVX512)
-            message(STATUS "AVX-512 enabled (ensure your CPU supports it!)")
-        endif()
-    endif()
+    # Note: AVX-512 support is detected at runtime via CPUFeatures
+    # Code paths will check CPUFeatures::has_avx512_full() before using AVX-512
+    # To compile specific AVX-512 functions, use __attribute__((target("avx512f")))
+    message(STATUS "AVX-512 runtime detection enabled (use function multiversioning for AVX-512 optimizations)")
 endif()
 
 # Set default build type to Release for performance
@@ -49,6 +39,7 @@ add_library(utils STATIC
     src/utils/sampling.cpp
     src/utils/serialization.cpp
     src/utils/profiler.cpp
+    src/utils/cpu_features.cpp
 )
 
 # Math Library (Abstracted Matrix Backend)
