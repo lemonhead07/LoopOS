@@ -211,16 +211,16 @@ void DataLoader::prepare_batch(size_t start_idx) {
     BatchType batch;
     
     // Determine batch size (might be smaller for last batch)
-    size_t end_idx = std::min(start_idx + config_.batch_size, dataset_.size());
+    // start_idx and end_idx are positions in the shuffled indices_ array
+    size_t end_idx = std::min(start_idx + config_.batch_size, indices_.size());
     batch.reserve(end_idx - start_idx);
     
     // Collect sequences for this batch using shuffled indices
     for (size_t i = start_idx; i < end_idx; ++i) {
-        if (i < indices_.size()) {
-            size_t data_idx = indices_[i];
-            if (data_idx < dataset_.size()) {
-                batch.push_back(dataset_[data_idx]);
-            }
+        // i is a position in indices_, indices_[i] is the actual dataset index
+        size_t data_idx = indices_[i];
+        if (data_idx < dataset_.size()) {
+            batch.push_back(dataset_[data_idx]);
         }
     }
     

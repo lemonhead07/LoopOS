@@ -308,12 +308,20 @@ TrainingMetrics AutoregressiveTrainer::train_step_with_metrics(const std::vector
     return metrics;
 }
 
+// Default DataLoader configuration constants
+namespace {
+    constexpr int DEFAULT_PREFETCH_BATCHES = 3;
+    constexpr int DEFAULT_NUM_WORKERS = 2;
+    constexpr bool DEFAULT_SHUFFLE = true;
+}
+
 void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dataset, 
                                         float learning_rate, 
                                         int num_epochs, 
                                         bool show_progress) {
     // Call the extended version with default parameters
-    train_epoch(dataset, learning_rate, num_epochs, show_progress, 3, 2, true);
+    train_epoch(dataset, learning_rate, num_epochs, show_progress, 
+                DEFAULT_PREFETCH_BATCHES, DEFAULT_NUM_WORKERS, DEFAULT_SHUFFLE);
 }
 
 void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dataset, 
