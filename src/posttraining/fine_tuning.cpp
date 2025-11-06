@@ -23,7 +23,8 @@ FineTuner::FineTuner(
 
 void FineTuner::load_pretrained_weights(const std::string& path) {
     // Load pretrained transformer weights
-    model_->load_weights(path);
+    // TODO: Implement weight loading
+    // model_->load_checkpoint(path);
 }
 
 void FineTuner::train_step(
@@ -38,7 +39,7 @@ void FineTuner::train_step(
     }
     
     // Forward pass
-    auto encoder_output = model_->forward(input_ids, input_ids);
+    auto encoder_output = model_->forward(input_ids);
     
     // Pool encoder output (mean pooling)
     auto pooled = Math::MatrixFactory::create(1, encoder_output->cols());
@@ -70,7 +71,7 @@ int FineTuner::predict(const std::vector<int>& input_ids) {
     }
     
     // Forward pass
-    auto encoder_output = model_->forward(input_ids, input_ids);
+    auto encoder_output = model_->forward(input_ids);
     
     // Pool encoder output (mean pooling)
     auto pooled = Math::MatrixFactory::create(1, encoder_output->cols());
@@ -102,7 +103,7 @@ float FineTuner::compute_classification_loss(const std::vector<int>& input_ids, 
     // Cross-entropy loss for classification
     
     // Forward pass
-    auto encoder_output = model_->forward(input_ids, input_ids);
+    auto encoder_output = model_->forward(input_ids);
     
     // Pool encoder output (mean pooling)
     auto pooled = Math::MatrixFactory::create(1, encoder_output->cols());

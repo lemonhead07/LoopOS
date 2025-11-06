@@ -19,7 +19,7 @@
     "num_epochs": 1
   },
   "data": {
-    "input_file": "data/pretraining/text/trump_3.6.txt",
+    "input_file": "data/pretraining/text/test_data.txt",
     "output_dir": "outputs/autoregressive"
   }
 }

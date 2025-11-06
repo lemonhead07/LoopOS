@@ -18,7 +18,8 @@ ChainOfThought::ChainOfThought(
 }
 
 void ChainOfThought::load_pretrained_weights(const std::string& path) {
-    model_->load_weights(path);
+    // TODO: Implement weight loading
+    // model_->load_checkpoint(path);
 }
 
 ChainOfThought::ReasoningResult ChainOfThought::solve_with_reasoning(const std::string& problem) {
@@ -81,7 +82,7 @@ void ChainOfThought::train_step(
     
     // Train on the full reasoning chain
     if (full_sequence.size() > 1) {
-        auto logits = model_->forward(full_sequence, full_sequence);
+        auto logits = model_->forward(full_sequence);
         
         // Log the training step for monitoring
         Utils::ModuleLogger logger("CHAIN_OF_THOUGHT");
@@ -103,7 +104,7 @@ std::vector<int> ChainOfThought::generate_reasoning_step(const std::vector<int>&
     }
     
     // Generate tokens autoregressively for one reasoning step
-    auto logits = model_->forward(context, context);
+    auto logits = model_->forward(context);
     
     // Sample next few tokens (simplified greedy sampling)
     std::vector<int> step_tokens;
@@ -111,7 +112,7 @@ std::vector<int> ChainOfThought::generate_reasoning_step(const std::vector<int>&
     
     std::vector<int> current_context = context;
     for (int i = 0; i < step_length; ++i) {
-        auto current_logits = model_->forward(current_context, current_context);
+        auto current_logits = model_->forward(current_context);
         size_t last_pos = current_logits->rows() - 1;
         
         // Get probabilities for last position

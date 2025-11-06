@@ -39,7 +39,7 @@ void MaskedLMTrainer::train_step(
     }
     
     // Forward pass
-    auto logits = model_->forward(masked_input, masked_input);
+    auto logits = model_->forward(masked_input);
     
     // Compute masked language modeling loss
     float loss = compute_mlm_loss(masked_input, masked_positions, true_labels);
@@ -87,7 +87,7 @@ float MaskedLMTrainer::compute_mlm_loss(
     }
     
     // Get model predictions
-    auto logits = model_->forward(input_ids, input_ids);
+    auto logits = model_->forward(input_ids);
     
     // Compute cross-entropy loss only for masked positions
     float total_loss = 0.0f;

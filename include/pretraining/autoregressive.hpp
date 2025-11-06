@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../transformer/transformer.hpp"
-#include "../transformer/optimized_transformer.hpp"
+#include "../transformer/transformer.hpp"
 #include <vector>
 #include <string>
 
@@ -50,7 +50,7 @@ public:
     float compute_loss_silent(const std::vector<int>& input_ids, const std::vector<int>& target_ids);
     
 private:
-    std::unique_ptr<Transformer::OptimizedTransformer> model_;
+    std::unique_ptr<Transformer::Transformer> model_;
     int vocab_size_;
     int d_model_;
     int num_heads_;

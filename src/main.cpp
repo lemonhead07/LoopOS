@@ -6,6 +6,7 @@
 #include "utils/logger.hpp"
 #include "utils/memory_manager.hpp"
 #include "utils/thread_pool.hpp"
+#include "utils/cpu_features.hpp"
 #include <iostream>
 #include <memory>
 
@@ -18,6 +19,18 @@ int main() {
     
     main_logger.info("=== LoopOS Transformer Framework ===");
     main_logger.info("Starting system initialization...\n");
+    
+    // Display detected CPU SIMD features
+    main_logger.info("Detecting CPU SIMD capabilities...");
+    main_logger.info(Utils::CPUFeatures::to_string());
+    if (Utils::CPUFeatures::has_avx512_full()) {
+        main_logger.info("AVX-512 fully supported - using AVX-512 optimizations");
+    } else if (Utils::CPUFeatures::get().has_avx2) {
+        main_logger.info("AVX2 supported - using AVX2 optimizations");
+    } else {
+        main_logger.info("Using baseline CPU optimizations");
+    }
+    main_logger.info("");
     
     // Hardware Detection Module
     main_logger.info("Running hardware detection modules...");

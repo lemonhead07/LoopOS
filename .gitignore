@@ -1,5 +1,6 @@
 # Build artifacts
 build/
+build_*/
 *.o
 *.a
 *.so
@@ -13,6 +14,9 @@ matrix_demo
 pretraining_demo
 posttraining_demo
 basic_tests
+chat_bot
+model_test
+build_tokenizer
 
 # Log files (keep directory structure but ignore logs)
 logs/*.log

@@ -27,7 +27,8 @@ ReinforcementTrainer::ReinforcementTrainer(
 
 void ReinforcementTrainer::load_pretrained_weights(const std::string& path) {
     // Load pretrained weights for policy model
-    policy_model_->load_weights(path);
+    // TODO: Implement weight loading
+    // policy_model_->load_weights(path);
 }
 
 void ReinforcementTrainer::train_reward_model(
@@ -90,10 +91,10 @@ void ReinforcementTrainer::ppo_train_step(
     full_sequence.insert(full_sequence.end(), response.begin(), response.end());
     
     // Get policy logits
-    auto policy_logits = policy_model_->forward(full_sequence, full_sequence);
+    auto policy_logits = policy_model_->forward(full_sequence);
     
     // Get value estimates
-    auto value_output = value_model_->forward(full_sequence, full_sequence);
+    auto value_output = value_model_->forward(full_sequence);
     
     // Compute advantages (simplified)
     float value_estimate = value_output->mean();
@@ -129,7 +130,7 @@ float ReinforcementTrainer::compute_reward(
     full_sequence.insert(full_sequence.end(), response.begin(), response.end());
     
     // Get reward model output
-    auto reward_output = reward_model_->forward(full_sequence, full_sequence);
+    auto reward_output = reward_model_->forward(full_sequence);
     
     // Pool to get scalar reward (mean of last layer)
     float reward_sum = 0.0f;
@@ -155,7 +156,7 @@ std::vector<int> ReinforcementTrainer::generate_with_rl(
     
     for (int i = 0; i < max_length && generated.size() < static_cast<size_t>(max_length); ++i) {
         // Get policy logits
-        auto logits = policy_model_->forward(generated, generated);
+        auto logits = policy_model_->forward(generated);
         
         // Get probabilities for last position
         size_t last_pos = logits->rows() - 1;
