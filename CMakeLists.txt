@@ -50,7 +50,7 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Utilities (Logger, Tokenizer, Sampling, Serialization, Profiler, CPUFeatures, ModelLoader)
+# Utilities (Logger, Tokenizer, Sampling, Serialization, Profiler, CPUFeatures, ModelLoader, DataLoader)
 add_library(utils STATIC
     src/utils/logger.cpp
     src/utils/tokenizer.cpp
@@ -59,6 +59,7 @@ add_library(utils STATIC
     src/utils/profiler.cpp
     src/utils/cpu_features.cpp
     src/utils/model_loader.cpp
+    src/utils/data_loader.cpp
 )
 
 # Math Library (Abstracted Matrix Backend)
