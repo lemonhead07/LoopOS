@@ -1,5 +1,6 @@
 #include "pretraining/masked_lm.hpp"
 #include "math/cpu_matrix.hpp"
+#include "utils/logger.hpp"
 #include <cmath>
 #include <random>
 #include <stdexcept>
@@ -42,6 +43,12 @@ void MaskedLMTrainer::train_step(
     
     // Compute masked language modeling loss
     float loss = compute_mlm_loss(masked_input, masked_positions, true_labels);
+    
+    // Log the training loss for monitoring
+    Utils::ModuleLogger logger("MASKED_LM");
+    logger.debug("Training step - Loss: " + std::to_string(loss) + 
+                 ", Learning rate: " + std::to_string(learning_rate) + 
+                 ", Masked tokens: " + std::to_string(masked_positions.size()));
     
     // In a real implementation, this would:
     // 1. Compute gradients via backpropagation

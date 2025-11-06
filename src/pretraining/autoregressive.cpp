@@ -1,5 +1,6 @@
 #include "pretraining/autoregressive.hpp"
 #include "math/cpu_matrix.hpp"
+#include "utils/logger.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -39,6 +40,11 @@ void AutoregressiveTrainer::train_step(const std::vector<int>& input_ids, float 
     
     // Compute loss (cross-entropy)
     float loss = compute_loss(inputs, targets);
+    
+    // Log the training loss for monitoring
+    Utils::ModuleLogger logger("AUTOREGRESSIVE");
+    logger.debug("Training step - Loss: " + std::to_string(loss) + 
+                 ", Learning rate: " + std::to_string(learning_rate));
     
     // In a real implementation, this would:
     // 1. Compute gradients via backpropagation
