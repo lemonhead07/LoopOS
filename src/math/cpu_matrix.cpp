@@ -1,6 +1,8 @@
 #include "math/cpu_matrix.hpp"
+#include "math/optimized_cpu_matrix.hpp"
 #include "math/matrix_interface.hpp"
 #include "utils/logger.hpp"
+#include "utils/memory_manager.hpp"
 #include <cmath>
 #include <random>
 #include <algorithm>
@@ -10,7 +12,7 @@ namespace LoopOS {
 namespace Math {
 
 // MatrixFactory static member
-MatrixFactory::Backend MatrixFactory::current_backend_ = MatrixFactory::Backend::CPU_NAIVE;
+MatrixFactory::Backend MatrixFactory::current_backend_ = MatrixFactory::Backend::CPU_OPTIMIZED;
 
 void MatrixFactory::set_backend(Backend backend) {
     current_backend_ = backend;
@@ -21,16 +23,19 @@ void MatrixFactory::set_backend(Backend backend) {
             logger.info("Matrix backend set to: CPU_NAIVE");
             break;
         case Backend::CPU_OPTIMIZED:
-            logger.warning("CPU_OPTIMIZED not yet implemented, using CPU_NAIVE");
+            logger.info("Matrix backend set to: CPU_OPTIMIZED (SIMD + Multithreading)");
             break;
         case Backend::CUDA:
-            logger.warning("CUDA not yet implemented, using CPU_NAIVE");
+            logger.warning("CUDA not yet implemented, using CPU_OPTIMIZED");
+            current_backend_ = Backend::CPU_OPTIMIZED;
             break;
         case Backend::BLAS:
-            logger.warning("BLAS not yet implemented, using CPU_NAIVE");
+            logger.warning("BLAS not yet implemented, using CPU_OPTIMIZED");
+            current_backend_ = Backend::CPU_OPTIMIZED;
             break;
         case Backend::CUSTOM:
-            logger.warning("CUSTOM backend not configured, using CPU_NAIVE");
+            logger.warning("CUSTOM backend not configured, using CPU_OPTIMIZED");
+            current_backend_ = Backend::CPU_OPTIMIZED;
             break;
     }
 }
@@ -40,27 +45,47 @@ MatrixFactory::Backend MatrixFactory::get_backend() {
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols) {
-    return std::make_unique<CPUMatrix>(rows, cols);
+    if (current_backend_ == Backend::CPU_NAIVE) {
+        return std::make_unique<CPUMatrix>(rows, cols);
+    } else {
+        return std::make_unique<OptimizedCPUMatrix>(rows, cols);
+    }
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols, const std::vector<float>& data) {
-    return std::make_unique<CPUMatrix>(rows, cols, data);
+    if (current_backend_ == Backend::CPU_NAIVE) {
+        return std::make_unique<CPUMatrix>(rows, cols, data);
+    } else {
+        return std::make_unique<OptimizedCPUMatrix>(rows, cols, data);
+    }
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols, float initial_value) {
-    return std::make_unique<CPUMatrix>(rows, cols, initial_value);
+    if (current_backend_ == Backend::CPU_NAIVE) {
+        return std::make_unique<CPUMatrix>(rows, cols, initial_value);
+    } else {
+        return std::make_unique<OptimizedCPUMatrix>(rows, cols, initial_value);
+    }
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::zeros(size_t rows, size_t cols) {
-    return std::make_unique<CPUMatrix>(rows, cols, 0.0f);
+    if (current_backend_ == Backend::CPU_NAIVE) {
+        return std::make_unique<CPUMatrix>(rows, cols, 0.0f);
+    } else {
+        return std::make_unique<OptimizedCPUMatrix>(rows, cols, 0.0f);
+    }
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::ones(size_t rows, size_t cols) {
-    return std::make_unique<CPUMatrix>(rows, cols, 1.0f);
+    if (current_backend_ == Backend::CPU_NAIVE) {
+        return std::make_unique<CPUMatrix>(rows, cols, 1.0f);
+    } else {
+        return std::make_unique<OptimizedCPUMatrix>(rows, cols, 1.0f);
+    }
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::identity(size_t n) {
-    auto mat = std::make_unique<CPUMatrix>(n, n, 0.0f);
+    auto mat = create(n, n, 0.0f);
     for (size_t i = 0; i < n; ++i) {
         mat->at(i, i) = 1.0f;
     }
@@ -77,7 +102,7 @@ std::unique_ptr<IMatrix> MatrixFactory::random_uniform(size_t rows, size_t cols,
         val = dis(gen);
     }
     
-    return std::make_unique<CPUMatrix>(rows, cols, data);
+    return create(rows, cols, data);
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::random_normal(size_t rows, size_t cols, float mean, float stddev) {
@@ -90,7 +115,7 @@ std::unique_ptr<IMatrix> MatrixFactory::random_normal(size_t rows, size_t cols, 
         val = dis(gen);
     }
     
-    return std::make_unique<CPUMatrix>(rows, cols, data);
+    return create(rows, cols, data);
 }
 
 // CPUMatrix implementation

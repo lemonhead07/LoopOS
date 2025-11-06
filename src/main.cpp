@@ -4,6 +4,8 @@
 #include "math/matrix_interface.hpp"
 #include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
+#include "utils/memory_manager.hpp"
+#include "utils/thread_pool.hpp"
 #include <iostream>
 #include <memory>
 
@@ -34,6 +36,15 @@ int main() {
         gpu_detector.print_info(gpu);
     }
     
+    // Initialize memory manager with 80% of available memory
+    main_logger.info("\nInitializing memory manager...");
+    Utils::MemoryManager::get_instance().initialize(0.8f);
+    
+    // Initialize thread pool with hardware thread count
+    main_logger.info("Initializing thread pool...");
+    auto& thread_pool = Utils::ThreadPool::get_instance();
+    main_logger.info("Thread pool initialized with " + std::to_string(thread_pool.size()) + " threads");
+    
     // Select optimal matrix backend based on hardware
     main_logger.info("\nSelecting optimal matrix backend...");
     
@@ -44,12 +55,15 @@ int main() {
         }
         
         if (has_avx2) {
-            main_logger.info("AVX2 support detected - would use optimized backend");
-            // Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_OPTIMIZED);
+            main_logger.info("AVX2 support detected - using SIMD-optimized backend");
+            Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_OPTIMIZED);
+        } else {
+            main_logger.info("AVX2 not detected - using naive backend");
+            Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_NAIVE);
         }
+    } else {
+        Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_NAIVE);
     }
-    
-    Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_NAIVE);
     
     // Demonstrate matrix operations
     main_logger.info("\nDemonstrating abstracted matrix operations...");
@@ -74,10 +88,13 @@ int main() {
     auto mat_softmax = mat_a->softmax();
     mat_logger.info("Applied softmax activation");
     
+    main_logger.info("\nMemory usage: " + Utils::MemoryManager::get_instance().get_stats());
+    
     main_logger.info("\nAll modules initialized successfully!");
     main_logger.info("System ready for transformer model operations");
     main_logger.info("\nData directory created at: ./data/pretraining/");
     main_logger.info("Logs are being written to: ./logs/");
+
     
     return 0;
 }

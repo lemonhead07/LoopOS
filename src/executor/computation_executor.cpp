@@ -5,6 +5,7 @@
 #include "posttraining/fine_tuning.hpp"
 #include "posttraining/chain_of_thought.hpp"
 #include "posttraining/reinforcement.hpp"
+#include "utils/benchmark.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -123,6 +124,35 @@ void ComputationExecutor::run_autoregressive() {
     std::vector<std::vector<int>> sequences;
     if (data_config.input_file.has_value()) {
         sequences = tokenize_file(data_config.input_file.value(), model_config.vocab_size);
+        
+        // Chunk long sequences to max_length if specified
+        if (training_config.max_length.has_value()) {
+            int max_len = training_config.max_length.value();
+            std::vector<std::vector<int>> chunked_sequences;
+            size_t total_chunks = 0;
+            
+            for (const auto& seq : sequences) {
+                if (seq.size() <= static_cast<size_t>(max_len)) {
+                    chunked_sequences.push_back(seq);
+                } else {
+                    // Split into chunks
+                    for (size_t i = 0; i < seq.size(); i += max_len) {
+                        size_t chunk_size = std::min(static_cast<size_t>(max_len), seq.size() - i);
+                        std::vector<int> chunk(seq.begin() + i, seq.begin() + i + chunk_size);
+                        chunked_sequences.push_back(chunk);
+                        total_chunks++;
+                    }
+                }
+            }
+            
+            if (total_chunks > 0) {
+                logger_.info("Chunked " + std::to_string(total_chunks) + " long sequences into max_length=" + std::to_string(max_len));
+                logger_.info("Total sequences after chunking: " + std::to_string(chunked_sequences.size()));
+            }
+            
+            sequences = chunked_sequences;
+        }
+        
         logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
     } else {
         logger_.warning("No input file specified, using dummy data");
@@ -136,43 +166,14 @@ void ComputationExecutor::run_autoregressive() {
         }
     }
     
-    // Training loop
+    // Training with progress bar
     logger_.info("Starting training...");
     logger_.info("");
     
-    for (int epoch = 0; epoch < training_config.num_epochs; ++epoch) {
-        logger_.info("Epoch " + std::to_string(epoch + 1) + "/" + 
-                     std::to_string(training_config.num_epochs));
-        
-        float epoch_loss = 0.0f;
-        int num_batches = 0;
-        
-        for (size_t i = 0; i < sequences.size(); ++i) {
-            const auto& seq = sequences[i];
-            if (seq.size() < 2) continue;  // Need at least 2 tokens
-            
-            // Train on this sequence
-            trainer.train_step(seq, training_config.learning_rate);
-            
-            // Compute loss for monitoring
-            std::vector<int> inputs(seq.begin(), seq.end() - 1);
-            std::vector<int> targets(seq.begin() + 1, seq.end());
-            float loss = trainer.compute_loss(inputs, targets);
-            epoch_loss += loss;
-            num_batches++;
-            
-            // Show progress every few sequences
-            if ((i + 1) % std::max(1, static_cast<int>(sequences.size() / 10)) == 0) {
-                show_progress(i + 1, sequences.size(), loss);
-            }
-        }
-        
-        float avg_loss = num_batches > 0 ? epoch_loss / num_batches : 0.0f;
-        std::cout << std::endl;  // New line after progress bar
-        logger_.info("  Average Loss: " + std::to_string(avg_loss));
-        logger_.info("");
-    }
+    trainer.train_epoch(sequences, training_config.learning_rate, 
+                       training_config.num_epochs, true);
     
+    logger_.info("");
     logger_.info("Training completed!");
     
     // Generate sample output
@@ -565,6 +566,9 @@ void ComputationExecutor::run_rlhf() {
 
 // Helper function to tokenize text into simple word-based tokens
 std::vector<std::vector<int>> ComputationExecutor::tokenize_file(const std::string& filename, int vocab_size) {
+    logger_.info("Tokenizing file: " + filename);
+    Utils::Timer tokenize_timer;
+    
     std::ifstream file(filename);
     if (!file.is_open()) {
         throw std::runtime_error("Cannot open file: " + filename);
@@ -573,6 +577,10 @@ std::vector<std::vector<int>> ComputationExecutor::tokenize_file(const std::stri
     std::vector<std::vector<int>> sequences;
     std::string line;
     std::hash<std::string> hasher;
+    
+    size_t total_tokens = 0;
+    size_t max_seq_len = 0;
+    size_t min_seq_len = std::numeric_limits<size_t>::max();
     
     while (std::getline(file, line)) {
         if (line.empty()) continue;
@@ -588,9 +596,21 @@ std::vector<std::vector<int>> ComputationExecutor::tokenize_file(const std::stri
         }
         
         if (!tokens.empty()) {
+            total_tokens += tokens.size();
+            max_seq_len = std::max(max_seq_len, tokens.size());
+            min_seq_len = std::min(min_seq_len, tokens.size());
             sequences.push_back(tokens);
         }
     }
+    
+    double tokenize_time = tokenize_timer.elapsed_ms();
+    
+    logger_.info("Tokenization complete in " + std::to_string(tokenize_time / 1000.0) + "s");
+    logger_.info("Total sequences: " + std::to_string(sequences.size()));
+    logger_.info("Total tokens: " + std::to_string(total_tokens));
+    logger_.info("Avg sequence length: " + std::to_string(total_tokens / sequences.size()));
+    logger_.info("Min sequence length: " + std::to_string(min_seq_len));
+    logger_.info("Max sequence length: " + std::to_string(max_seq_len));
     
     return sequences;
 }

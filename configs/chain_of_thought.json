@@ -1,16 +1,16 @@
 {
   "model": {
     "type": "transformer",
-    "d_model": 1024,
-    "num_heads": 16,
-    "num_layers": 24,
-    "d_ff": 4096,
-    "vocab_size": 50000
+    "d_model": 384,
+    "num_heads": 8,
+    "num_layers": 6,
+    "d_ff": 1536,
+    "vocab_size": 16000
   },
   "computation": {
     "mode": "posttraining",
     "method": "chain_of_thought",
-    "description": "Chain-of-thought reasoning training"
+    "description": "Chain-of-thought reasoning training (optimized for i5-1135G7)"
   },
   "training": {
     "learning_rate": 0.00001,

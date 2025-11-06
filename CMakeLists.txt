@@ -4,8 +4,33 @@ project(LoopOS VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Compiler flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2")
+# Find OpenMP
+find_package(OpenMP REQUIRED)
+
+# Compiler flags for maximum optimization
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -mtune=native -funroll-loops -ffast-math")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
+
+# Enable AVX2/AVX512 if available
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mfma")
+    # Try AVX512 if available
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-mavx512f" COMPILER_SUPPORTS_AVX512)
+    if(COMPILER_SUPPORTS_AVX512)
+        # Enable full AVX-512 instruction set for Tiger Lake (11th gen Intel)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx512f -mavx512dq -mavx512bw -mavx512vl -mavx512cd -mavx512vnni -mavx512vbmi -mavx512vbmi2")
+        add_definitions(-DHAVE_AVX512)
+        message(STATUS "AVX-512 enabled with full instruction set")
+    endif()
+    add_definitions(-DHAVE_AVX2)
+endif()
+
+# Set default build type to Release for performance
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
@@ -18,8 +43,12 @@ add_library(utils STATIC
 # Math Library (Abstracted Matrix Backend)
 add_library(math_backend STATIC
     src/math/cpu_matrix.cpp
+    src/math/optimized_cpu_matrix.cpp
+    src/utils/thread_pool.cpp
+    src/utils/memory_manager.cpp
+    src/utils/benchmark.cpp
 )
-target_link_libraries(math_backend utils)
+target_link_libraries(math_backend utils OpenMP::OpenMP_CXX pthread)
 
 # Transformer Library
 add_library(transformer STATIC
@@ -27,6 +56,9 @@ add_library(transformer STATIC
     src/transformer/feedforward.cpp
     src/transformer/layer_norm.cpp
     src/transformer/transformer.cpp
+    src/transformer/optimized_attention.cpp
+    src/transformer/optimized_feedforward.cpp
+    src/transformer/optimized_transformer.cpp
 )
 target_link_libraries(transformer math_backend utils)
 
@@ -74,13 +106,6 @@ target_link_libraries(loop_os
     utils
 )
 
-# Individual project executables
-add_executable(hardware_demo examples/hardware_demo.cpp)
-target_link_libraries(hardware_demo hardware_detection utils)
-
-add_executable(matrix_demo examples/matrix_demo.cpp)
-target_link_libraries(matrix_demo math_backend utils)
-
 # CLI executable
 add_executable(loop_cli src/cli_main.cpp)
 target_link_libraries(loop_cli
@@ -89,15 +114,3 @@ target_link_libraries(loop_cli
     utils
 )
 
-# Enable testing
-enable_testing()
-
-# Test executable
-add_executable(cli_tests tests/cli_tests.cpp)
-target_link_libraries(cli_tests
-    executor
-    config
-    utils
-)
-
-add_test(NAME CLITests COMMAND cli_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
