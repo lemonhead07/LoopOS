@@ -8,6 +8,25 @@
 namespace LoopOS {
 namespace Transformer {
 
+// Key-Value cache for faster autoregressive generation
+struct KVCache {
+    std::unique_ptr<Math::IMatrix> keys;      // Cached key vectors
+    std::unique_ptr<Math::IMatrix> values;    // Cached value vectors
+    size_t seq_length;                        // Current cache length
+    size_t max_length;                        // Maximum cache capacity
+    
+    KVCache(size_t max_len, int d_model) 
+        : seq_length(0), max_length(max_len) {}
+    
+    void reset() {
+        seq_length = 0;
+    }
+    
+    bool is_full() const {
+        return seq_length >= max_length;
+    }
+};
+
 // High-performance batched multi-head attention
 // Processes (batch_size, seq_len, d_model) tensors natively
 class OptimizedMultiHeadAttention {
@@ -28,6 +47,16 @@ public:
         const Math::IMatrix& key, 
         const Math::IMatrix& value,
         const Math::IMatrix* mask = nullptr);
+    
+    // Forward pass with KV-cache for autoregressive generation
+    // Only computes attention for new tokens, reuses cached K/V
+    std::unique_ptr<Math::IMatrix> forward_with_cache(
+        const Math::IMatrix& query,
+        KVCache* cache = nullptr,
+        const Math::IMatrix* mask = nullptr);
+    
+    // Create a new KV cache for this attention layer
+    std::unique_ptr<KVCache> create_cache(size_t max_length) const;
     
 private:
     int d_model_;

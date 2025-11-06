@@ -38,16 +38,24 @@ public:
     // Generate text autoregressively
     std::vector<int> generate(const std::vector<int>& prompt, int max_length);
     
+    // Save model weights to file
+    void save_checkpoint(const std::string& filepath) const;
+    
+    // Load model weights from file
+    void load_checkpoint(const std::string& filepath);
+    
     float compute_loss(const std::vector<int>& input_ids, const std::vector<int>& target_ids);
     
     // Internal method for silent loss computation (no logging)
     float compute_loss_silent(const std::vector<int>& input_ids, const std::vector<int>& target_ids);
     
 private:
-    std::unique_ptr<Transformer::Transformer> model_;  // Legacy model
-    std::unique_ptr<Transformer::OptimizedTransformer> optimized_model_;  // New optimized model
+    std::unique_ptr<Transformer::OptimizedTransformer> model_;
     int vocab_size_;
-    bool use_optimized_;  // Flag to switch between implementations
+    int d_model_;
+    int num_heads_;
+    int num_layers_;
+    int d_ff_;
 };
 
 } // namespace PreTraining

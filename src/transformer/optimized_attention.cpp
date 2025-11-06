@@ -157,6 +157,152 @@ std::unique_ptr<Math::IMatrix> OptimizedMultiHeadAttention::forward(
     return output;
 }
 
+std::unique_ptr<KVCache> OptimizedMultiHeadAttention::create_cache(size_t max_length) const {
+    return std::make_unique<KVCache>(max_length, d_model_);
+}
+
+std::unique_ptr<Math::IMatrix> OptimizedMultiHeadAttention::forward_with_cache(
+    const Math::IMatrix& query,
+    KVCache* cache,
+    const Math::IMatrix* mask) {
+    
+    size_t new_seq_len = query.rows();
+    
+    // If no cache, fall back to regular forward pass
+    if (cache == nullptr) {
+        return forward(query, query, query, mask);
+    }
+    
+    // 1. Project query, key, value for new tokens only
+    auto Q = Math::MatrixFactory::create(new_seq_len, d_model_);
+    auto K_new = Math::MatrixFactory::create(new_seq_len, d_model_);
+    auto V_new = Math::MatrixFactory::create(new_seq_len, d_model_);
+    
+    fused_qkv_projection(query, *Q, *K_new, *V_new);
+    
+    // 2. Update cache with new keys and values
+    size_t total_seq_len = cache->seq_length + new_seq_len;
+    
+    // Initialize or expand cache
+    if (cache->keys == nullptr) {
+        cache->keys = Math::MatrixFactory::create(total_seq_len, d_model_);
+        cache->values = Math::MatrixFactory::create(total_seq_len, d_model_);
+        
+        // Copy new K, V to cache
+        #pragma omp parallel for collapse(2)
+        for (size_t i = 0; i < new_seq_len; ++i) {
+            for (int j = 0; j < d_model_; ++j) {
+                cache->keys->at(i, j) = K_new->at(i, j);
+                cache->values->at(i, j) = V_new->at(i, j);
+            }
+        }
+    } else {
+        // Concatenate new keys/values to existing cache
+        auto K_full = Math::MatrixFactory::create(total_seq_len, d_model_);
+        auto V_full = Math::MatrixFactory::create(total_seq_len, d_model_);
+        
+        // Copy old cache
+        #pragma omp parallel for collapse(2)
+        for (size_t i = 0; i < cache->seq_length; ++i) {
+            for (int j = 0; j < d_model_; ++j) {
+                K_full->at(i, j) = cache->keys->at(i, j);
+                V_full->at(i, j) = cache->values->at(i, j);
+            }
+        }
+        
+        // Append new keys/values
+        #pragma omp parallel for collapse(2)
+        for (size_t i = 0; i < new_seq_len; ++i) {
+            for (int j = 0; j < d_model_; ++j) {
+                K_full->at(cache->seq_length + i, j) = K_new->at(i, j);
+                V_full->at(cache->seq_length + i, j) = V_new->at(i, j);
+            }
+        }
+        
+        cache->keys = std::move(K_full);
+        cache->values = std::move(V_full);
+    }
+    
+    cache->seq_length = total_seq_len;
+    
+    // 3. Compute attention using all cached keys/values
+    auto attention_output = Math::MatrixFactory::create(new_seq_len, d_model_);
+    
+    if (num_heads_ > 1) {
+        // Multi-head attention with cache
+        #pragma omp parallel for
+        for (int head = 0; head < num_heads_; ++head) {
+            size_t start_col = head * d_k_;
+            
+            // Extract head slices for query (new tokens only)
+            auto Q_head = Math::MatrixFactory::create(new_seq_len, d_k_);
+            
+            // Extract head slices for keys/values (full cache)
+            auto K_head = Math::MatrixFactory::create(total_seq_len, d_k_);
+            auto V_head = Math::MatrixFactory::create(total_seq_len, d_k_);
+            
+            auto head_output = Math::MatrixFactory::create(new_seq_len, d_k_);
+            
+            // Copy query data for this head (new tokens)
+            for (size_t i = 0; i < new_seq_len; ++i) {
+                for (size_t j = 0; j < static_cast<size_t>(d_k_); ++j) {
+                    Q_head->at(i, j) = Q->at(i, start_col + j);
+                }
+            }
+            
+            // Copy cached K, V for this head (all tokens)
+            for (size_t i = 0; i < total_seq_len; ++i) {
+                for (size_t j = 0; j < static_cast<size_t>(d_k_); ++j) {
+                    K_head->at(i, j) = cache->keys->at(i, start_col + j);
+                    V_head->at(i, j) = cache->values->at(i, start_col + j);
+                }
+            }
+            
+            // Attention: Q_new @ K_full^T @ V_full
+            // This is the key optimization: we don't recompute attention for old tokens
+            float scale = 1.0f / std::sqrt(static_cast<float>(d_k_));
+            auto K_T = K_head->transpose();
+            auto scores = Q_head->matmul(*K_T);
+            
+            // Apply scaling
+            float* scores_data = const_cast<float*>(scores->data());
+            #pragma omp simd
+            for (size_t i = 0; i < new_seq_len * total_seq_len; ++i) {
+                scores_data[i] *= scale;
+            }
+            
+            // Softmax and weighted sum
+            auto attn_weights = scores->softmax(1);
+            auto result = attn_weights->matmul(*V_head);
+            
+            // Copy to output
+            for (size_t i = 0; i < new_seq_len; ++i) {
+                for (size_t j = 0; j < static_cast<size_t>(d_k_); ++j) {
+                    attention_output->at(i, start_col + j) = result->at(i, j);
+                }
+            }
+        }
+    } else {
+        // Single head with cache
+        float scale = 1.0f / std::sqrt(static_cast<float>(d_k_));
+        auto K_T = cache->keys->transpose();
+        auto scores = Q->matmul(*K_T);
+        
+        float* scores_data = const_cast<float*>(scores->data());
+        for (size_t i = 0; i < new_seq_len * total_seq_len; ++i) {
+            scores_data[i] *= scale;
+        }
+        
+        auto attn_weights = scores->softmax(1);
+        attention_output = attn_weights->matmul(*cache->values);
+    }
+    
+    // 4. Output projection
+    auto output = attention_output->matmul(*W_o_);
+    
+    return output;
+}
+
 std::vector<std::unique_ptr<Math::IMatrix>> OptimizedMultiHeadAttention::forward_batched(
     const std::vector<const Math::IMatrix*>& query_batch,
     const std::vector<const Math::IMatrix*>& key_batch,

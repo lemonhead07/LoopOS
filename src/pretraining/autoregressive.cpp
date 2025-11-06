@@ -15,18 +15,19 @@ namespace PreTraining {
 
 AutoregressiveTrainer::AutoregressiveTrainer(
     int d_model, int num_heads, int num_layers, int d_ff, int vocab_size)
-    : vocab_size_(vocab_size), use_optimized_(true) {
+    : vocab_size_(vocab_size), d_model_(d_model), num_heads_(num_heads),
+      num_layers_(num_layers), d_ff_(d_ff) {
     
     // Ensure we're using optimized matrices for best performance
     Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_OPTIMIZED);
     
     // Create optimized transformer (with batching support)
-    optimized_model_ = std::make_unique<Transformer::OptimizedTransformer>(
+    model_ = std::make_unique<Transformer::OptimizedTransformer>(
         d_model, num_heads, num_layers, d_ff, vocab_size, 512  // max_seq_len=512
     );
     
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
-    logger.info("Using OPTIMIZED transformer with batched operations");
+    logger.info("Created optimized transformer with batched operations");
 }
 
 void AutoregressiveTrainer::train_step(const std::vector<int>& input_ids, float learning_rate) {
@@ -51,9 +52,9 @@ void AutoregressiveTrainer::train_step(const std::vector<int>& input_ids, float 
     
     logger.debug("Training on sequence of length: " + std::to_string(inputs.size()));
     
-    // Forward pass (simplified - in production would use proper batching)
+    // Forward pass (using optimized model)
     timer.reset();
-    auto logits = model_->forward(inputs, inputs);
+    auto logits = model_->forward(inputs);
     double forward_time_ms = timer.elapsed_ms();
     
     // Compute loss (cross-entropy)
@@ -98,7 +99,7 @@ std::vector<int> AutoregressiveTrainer::generate(const std::vector<int>& prompt,
     for (int i = 0; i < max_length && generated.size() < static_cast<size_t>(max_length); ++i) {
         // Forward pass with current sequence
         Utils::Timer forward_timer;
-        auto logits = model_->forward(generated, generated);
+        auto logits = model_->forward(generated);
         total_forward_time += forward_timer.elapsed_ms();
         
         // Get logits for last position
@@ -162,28 +163,26 @@ float AutoregressiveTrainer::compute_loss(const std::vector<int>& input_ids, con
     
     // Get model predictions
     Utils::Timer forward_timer;
-    auto logits = model_->forward(input_ids, input_ids);
+    auto logits = model_->forward(input_ids);
     double forward_time = forward_timer.elapsed_ms();
     
     // Compute cross-entropy loss
+    // OPTIMIZED: Compute softmax once for all positions instead of per-position
     Utils::Timer ce_timer;
-    float total_loss = 0.0f;
     
+    // Apply softmax to entire logits matrix at once (batch operation)
+    auto probs = logits->softmax(1);  // softmax along vocab dimension
+    
+    // Now compute cross-entropy loss by indexing into the probabilities
+    float total_loss = 0.0f;
     for (size_t i = 0; i < target_ids.size(); ++i) {
-        // Get probabilities for this position
-        auto probs_matrix = Math::MatrixFactory::create(1, logits->cols());
-        for (size_t j = 0; j < logits->cols(); ++j) {
-            probs_matrix->at(0, j) = logits->at(i, j);
-        }
-        auto probs = probs_matrix->softmax(1);
-        
-        // Get probability of target token
         int target_token = target_ids[i];
         if (target_token < 0 || target_token >= vocab_size_) {
             throw std::out_of_range("Target token ID is out of vocabulary range");
         }
         
-        float target_prob = probs->at(0, target_token);
+        // Get probability of target token at position i
+        float target_prob = probs->at(i, target_token);
         
         // Add negative log probability to loss
         total_loss += -std::log(target_prob + 1e-10f);  // Add epsilon to avoid log(0)
@@ -219,26 +218,22 @@ float AutoregressiveTrainer::compute_loss_silent(const std::vector<int>& input_i
     }
     
     // Get model predictions
-    auto logits = model_->forward(input_ids, input_ids);
+    auto logits = model_->forward(input_ids);
     
     // Compute cross-entropy loss
-    float total_loss = 0.0f;
+    // OPTIMIZED: Compute softmax once for all positions instead of per-position
+    auto probs = logits->softmax(1);  // softmax along vocab dimension
     
+    // Now compute cross-entropy loss by indexing into the probabilities
+    float total_loss = 0.0f;
     for (size_t i = 0; i < target_ids.size(); ++i) {
-        // Get probabilities for this position
-        auto probs_matrix = Math::MatrixFactory::create(1, logits->cols());
-        for (size_t j = 0; j < logits->cols(); ++j) {
-            probs_matrix->at(0, j) = logits->at(i, j);
-        }
-        auto probs = probs_matrix->softmax(1);
-        
-        // Get probability of target token
         int target_token = target_ids[i];
         if (target_token < 0 || target_token >= vocab_size_) {
             throw std::out_of_range("Target token ID is out of vocabulary range");
         }
         
-        float target_prob = probs->at(0, target_token);
+        // Get probability of target token at position i
+        float target_prob = probs->at(i, target_token);
         
         // Add negative log probability to loss
         total_loss += -std::log(target_prob + 1e-10f);  // Add epsilon to avoid log(0)
@@ -272,35 +267,27 @@ TrainingMetrics AutoregressiveTrainer::train_step_with_metrics(const std::vector
     
     // Forward pass (using optimized model if available)
     timer.reset();
-    std::unique_ptr<Math::IMatrix> logits;
-    
-    if (use_optimized_ && optimized_model_) {
-        logits = optimized_model_->forward(inputs);
-    } else {
-        logits = model_->forward(inputs, inputs);
-    }
+    std::unique_ptr<Math::IMatrix> logits = model_->forward(inputs);
     
     metrics.forward_time_ms = timer.elapsed_ms();
     
     // Compute loss directly from logits (no second forward pass!)
+    // OPTIMIZED: Compute softmax once for all positions instead of per-position
     timer.reset();
-    float total_loss = 0.0f;
     
+    // Apply softmax to entire logits matrix at once (batch operation)
+    auto probs = logits->softmax(1);  // softmax along vocab dimension
+    
+    // Now compute cross-entropy loss by indexing into the probabilities
+    float total_loss = 0.0f;
     for (size_t i = 0; i < targets.size(); ++i) {
-        // Get probabilities for this position
-        auto probs_matrix = Math::MatrixFactory::create(1, logits->cols());
-        for (size_t j = 0; j < logits->cols(); ++j) {
-            probs_matrix->at(0, j) = logits->at(i, j);
-        }
-        auto probs = probs_matrix->softmax(1);
-        
-        // Get probability of target token
         int target_token = targets[i];
         if (target_token < 0 || target_token >= vocab_size_) {
             throw std::out_of_range("Target token ID is out of vocabulary range");
         }
         
-        float target_prob = probs->at(0, target_token);
+        // Get probability of target token at position i
+        float target_prob = probs->at(i, target_token);
         
         // Add negative log probability to loss
         total_loss += -std::log(target_prob + 1e-10f);
@@ -355,14 +342,6 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
         size_t adaptation_window_tokens = 0;
         
         Utils::Timer epoch_timer;
-        
-        // Training metrics display (will be updated in place)
-        std::cout << "\nMetrics:" << std::endl;
-        std::cout << "  Loss: -.---" << std::endl;
-        std::cout << "  Avg tokens/sec: ----" << std::endl;
-        std::cout << "  Batch size: " << current_batch_size << std::endl;
-        std::cout << "  Elapsed: --m --s" << std::endl;
-        std::cout << std::endl;
         
         // Process dataset in batches for parallel execution
         for (size_t batch_start = 0; batch_start < dataset.size(); batch_start += current_batch_size) {
@@ -423,15 +402,19 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                     // Try increasing batch size
                     if (current_batch_size < MAX_BATCH_SIZE) {
                         current_batch_size = std::min(current_batch_size * 2, MAX_BATCH_SIZE);
-                        logger.debug("Increasing batch size to " + std::to_string(current_batch_size) + 
-                                   " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                        if (!show_progress) {
+                            logger.debug("Increasing batch size to " + std::to_string(current_batch_size) + 
+                                       " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                        }
                     }
                 } else if (current_throughput < best_throughput * 0.95) {
                     // Performance degraded - revert and try smaller
                     if (current_batch_size > MIN_BATCH_SIZE) {
                         current_batch_size = std::max(current_batch_size / 2, MIN_BATCH_SIZE);
-                        logger.debug("Decreasing batch size to " + std::to_string(current_batch_size) + 
-                                   " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                        if (!show_progress) {
+                            logger.debug("Decreasing batch size to " + std::to_string(current_batch_size) + 
+                                       " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                        }
                     } else {
                         // At minimum, stay there
                         current_batch_size = best_batch_size;
@@ -447,8 +430,8 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 batches_processed = 0;
             }
             
-            // Log batch performance periodically
-            if ((batch_end % 100 == 0) || (batch_end == dataset.size())) {
+            // Log batch performance periodically (only when not showing progress)
+            if (!show_progress && ((batch_end % 100 == 0) || (batch_end == dataset.size()))) {
                 double batch_speedup = batch_total_time / actual_batch_time_ms;
                 double batch_throughput = (batch_tokens * 1000.0) / actual_batch_time_ms;
                 std::ostringstream timing_oss;
@@ -459,24 +442,45 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 logger.debug(timing_oss.str());
             }
             
-            // Update progress bar
-            if (show_progress) {
-                // Move cursor up to overwrite metrics
-                Utils::ConsoleDisplay::move_up(6);
+            // Debug trail - log to file every 100 batches (doesn't interfere with display)
+            if (show_progress && ((batch_end % 100 == 0) || (batch_end == dataset.size()))) {
+                double batch_speedup = batch_total_time / actual_batch_time_ms;
+                double batch_throughput = (batch_tokens * 1000.0) / actual_batch_time_ms;
+                float avg_loss = epoch_loss / batch_end;
+                double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
                 
-                // Update metrics
-                std::ostringstream metric_oss;
-                metric_oss << std::fixed << std::setprecision(3);
-                
+                std::ostringstream debug_oss;
+                debug_oss << std::fixed << std::setprecision(2);
+                debug_oss << "Progress: " << batch_end << "/" << dataset.size() 
+                          << " (" << (batch_end * 100.0 / dataset.size()) << "%) | "
+                          << "Loss: " << avg_loss << " | "
+                          << "Throughput: " << avg_tokens_per_sec << " tok/s | "
+                          << "Batch: " << current_batch_size << " | "
+                          << "Speedup: " << batch_speedup << "x";
+                logger.debug(debug_oss.str());
+            }
+            
+            // Update progress bar and metrics display (only every 10 batches or at end)
+            if (show_progress && ((batch_end % 10 == 0) || (batch_end == dataset.size()))) {
+                // Calculate metrics
                 float avg_loss = epoch_loss / batch_end;
                 double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
                 double elapsed_sec = epoch_timer.elapsed_s();
+                int mins = static_cast<int>(elapsed_sec / 60);
+                int secs = static_cast<int>(elapsed_sec) % 60;
                 
+                // On first iteration, just print. On subsequent iterations, move up and overwrite
+                if (batch_start > 0) {
+                    // Move up 7 lines (6 for metrics + blank line, 1 for progress bar)
+                    Utils::ConsoleDisplay::move_up(7);
+                }
+                
+                // Print/update metrics block
                 Utils::ConsoleDisplay::clear_line();
                 std::cout << "Metrics:" << std::endl;
                 
                 Utils::ConsoleDisplay::clear_line();
-                std::cout << "  Loss: " << avg_loss << std::endl;
+                std::cout << "  Loss: " << std::fixed << std::setprecision(3) << avg_loss << std::endl;
                 
                 Utils::ConsoleDisplay::clear_line();
                 std::cout << "  Avg tokens/sec: " << std::fixed << std::setprecision(1) 
@@ -486,12 +490,12 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 std::cout << "  Batch size: " << current_batch_size << " (best: " << best_batch_size << ")" << std::endl;
                 
                 Utils::ConsoleDisplay::clear_line();
-                int mins = static_cast<int>(elapsed_sec / 60);
-                int secs = static_cast<int>(elapsed_sec) % 60;
                 std::cout << "  Elapsed: " << mins << "m " << secs << "s" << std::endl;
                 
-                std::cout << std::endl;
+                Utils::ConsoleDisplay::clear_line();
+                std::cout << std::endl;  // Blank line
                 
+                // Update progress bar on its own line
                 progress.update(batch_end);
             }
         }
@@ -526,6 +530,75 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                   << (total_overhead_time / epoch_time * 100.0) << "%)";
         logger.info(breakdown.str());
         logger.info("");
+    }
+}
+
+void AutoregressiveTrainer::save_checkpoint(const std::string& filepath) const {
+    Utils::ModuleLogger logger("AUTOREGRESSIVE");
+    logger.info("Saving model checkpoint to: " + filepath);
+    
+    try {
+        std::ofstream file(filepath, std::ios::binary);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open file for writing: " + filepath);
+        }
+        
+        // Write model architecture metadata
+        file.write(reinterpret_cast<const char*>(&d_model_), sizeof(d_model_));
+        file.write(reinterpret_cast<const char*>(&num_heads_), sizeof(num_heads_));
+        file.write(reinterpret_cast<const char*>(&num_layers_), sizeof(num_layers_));
+        file.write(reinterpret_cast<const char*>(&d_ff_), sizeof(d_ff_));
+        file.write(reinterpret_cast<const char*>(&vocab_size_), sizeof(vocab_size_));
+        
+        // Note: Actual weight saving would require serializing all matrices
+        // from the transformer layers. For now, we save the architecture metadata.
+        // TODO: Implement full weight serialization
+        
+        file.close();
+        logger.info("Model checkpoint saved successfully");
+        logger.info("Note: Full weight serialization not yet implemented");
+        
+    } catch (const std::exception& e) {
+        logger.error("Failed to save checkpoint: " + std::string(e.what()));
+        throw;
+    }
+}
+
+void AutoregressiveTrainer::load_checkpoint(const std::string& filepath) {
+    Utils::ModuleLogger logger("AUTOREGRESSIVE");
+    logger.info("Loading model checkpoint from: " + filepath);
+    
+    try {
+        std::ifstream file(filepath, std::ios::binary);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open file for reading: " + filepath);
+        }
+        
+        // Read model architecture metadata
+        int loaded_d_model, loaded_num_heads, loaded_num_layers, loaded_d_ff, loaded_vocab_size;
+        file.read(reinterpret_cast<char*>(&loaded_d_model), sizeof(loaded_d_model));
+        file.read(reinterpret_cast<char*>(&loaded_num_heads), sizeof(loaded_num_heads));
+        file.read(reinterpret_cast<char*>(&loaded_num_layers), sizeof(loaded_num_layers));
+        file.read(reinterpret_cast<char*>(&loaded_d_ff), sizeof(loaded_d_ff));
+        file.read(reinterpret_cast<char*>(&loaded_vocab_size), sizeof(loaded_vocab_size));
+        
+        // Verify architecture matches
+        if (loaded_d_model != d_model_ || loaded_num_heads != num_heads_ ||
+            loaded_num_layers != num_layers_ || loaded_d_ff != d_ff_ ||
+            loaded_vocab_size != vocab_size_) {
+            throw std::runtime_error("Model architecture mismatch. Cannot load checkpoint.");
+        }
+        
+        // Note: Actual weight loading would deserialize all matrices
+        // TODO: Implement full weight deserialization
+        
+        file.close();
+        logger.info("Model checkpoint loaded successfully");
+        logger.info("Note: Full weight deserialization not yet implemented");
+        
+    } catch (const std::exception& e) {
+        logger.error("Failed to load checkpoint: " + std::string(e.what()));
+        throw;
     }
 }
 

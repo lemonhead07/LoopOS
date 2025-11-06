@@ -39,6 +39,8 @@ private:
     
     // Helper methods
     std::vector<std::vector<int>> tokenize_file(const std::string& filename, int vocab_size);
+    void save_tokenized_cache(const std::string& filename, const std::vector<std::vector<int>>& sequences);
+    std::vector<std::vector<int>> load_tokenized_cache(const std::string& filename);
     void ensure_output_directory(const std::string& output_dir);
     void show_progress(int current, int total, float loss);
 };

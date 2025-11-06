@@ -35,9 +35,12 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Utilities (Logger)
+# Utilities (Logger, Tokenizer, Sampling, Serialization)
 add_library(utils STATIC
     src/utils/logger.cpp
+    src/utils/tokenizer.cpp
+    src/utils/sampling.cpp
+    src/utils/serialization.cpp
 )
 
 # Math Library (Abstracted Matrix Backend)
@@ -98,6 +101,13 @@ add_library(executor STATIC
 )
 target_link_libraries(executor config pretraining posttraining transformer utils)
 
+# Chat Library
+add_library(chat STATIC
+    src/chat/conversation.cpp
+    src/chat/chat_interface.cpp
+)
+target_link_libraries(chat utils pretraining transformer)
+
 # Main executable
 add_executable(loop_os src/main.cpp)
 target_link_libraries(loop_os 
@@ -111,6 +121,28 @@ add_executable(loop_cli src/cli_main.cpp)
 target_link_libraries(loop_cli
     executor
     config
+    utils
+)
+
+# Chat executable
+add_executable(chat_bot src/chat_main.cpp)
+target_link_libraries(chat_bot
+    chat
+    executor
+    config
+    utils
+)
+
+# Tokenizer builder executable
+add_executable(build_tokenizer src/build_tokenizer.cpp)
+target_link_libraries(build_tokenizer utils)
+
+# Model test executable
+add_executable(model_test src/model_test.cpp)
+target_link_libraries(model_test
+    pretraining
+    transformer
+    math_backend
     utils
 )
 

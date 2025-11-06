@@ -1,0 +1,18 @@
+{
+  "vocab_size": 10000,
+  "min_frequency": 2,
+  "special_tokens": {
+    "pad": "<pad>",
+    "unk": "<unk>",
+    "bos": "<bos>",
+    "eos": "<eos>",
+    "user": "<|user|>",
+    "assistant": "<|assistant|>",
+    "system": "<|system|>"
+  },
+  "normalization": {
+    "lowercase": true,
+    "remove_accents": false,
+    "handle_punctuation": "separate"
+  }
+}

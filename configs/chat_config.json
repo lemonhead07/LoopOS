@@ -1,0 +1,34 @@
+{
+  "model_config": {
+    "d_model": 256,
+    "num_heads": 8,
+    "num_layers": 6,
+    "dropout": 0.1,
+    "max_seq_length": 512,
+    "vocab_size": 10000
+  },
+  
+  "sampling": {
+    "temperature": 0.8,
+    "top_p": 0.95,
+    "top_k": 50,
+    "repetition_penalty": 1.1,
+    "max_length": 256
+  },
+  
+  "system_message": "You are a helpful AI assistant built on the LoopOS framework. You provide clear, accurate, and friendly responses to user questions. You are knowledgeable, respectful, and aim to be genuinely helpful.",
+  
+  "chat_settings": {
+    "save_conversations": true,
+    "conversation_dir": "outputs/conversations",
+    "show_token_count": true,
+    "show_generation_speed": true,
+    "color_output": true
+  },
+  
+  "generation": {
+    "use_kv_cache": true,
+    "batch_size": 1,
+    "num_beams": 1
+  }
+}
