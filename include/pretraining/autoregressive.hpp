@@ -35,6 +35,11 @@ public:
     void train_epoch(const std::vector<std::vector<int>>& dataset, float learning_rate, 
                      int num_epochs = 1, bool show_progress = true);
     
+    // Train for multiple epochs with custom data loader configuration
+    void train_epoch(const std::vector<std::vector<int>>& dataset, float learning_rate, 
+                     int num_epochs, bool show_progress,
+                     int prefetch_batches, int num_workers, bool shuffle);
+    
     // Generate text autoregressively
     std::vector<int> generate(const std::vector<int>& prompt, int max_length);
     

@@ -5,6 +5,7 @@
 #include "utils/benchmark.hpp"
 #include "utils/progress_bar.hpp"
 #include "utils/serialization.hpp"
+#include "utils/data_loader.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
@@ -307,10 +308,29 @@ TrainingMetrics AutoregressiveTrainer::train_step_with_metrics(const std::vector
     return metrics;
 }
 
+// Default DataLoader configuration constants
+namespace {
+    constexpr int DEFAULT_PREFETCH_BATCHES = 3;
+    constexpr int DEFAULT_NUM_WORKERS = 2;
+    constexpr bool DEFAULT_SHUFFLE = true;
+}
+
 void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dataset, 
                                         float learning_rate, 
                                         int num_epochs, 
                                         bool show_progress) {
+    // Call the extended version with default parameters
+    train_epoch(dataset, learning_rate, num_epochs, show_progress, 
+                DEFAULT_PREFETCH_BATCHES, DEFAULT_NUM_WORKERS, DEFAULT_SHUFFLE);
+}
+
+void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dataset, 
+                                        float learning_rate, 
+                                        int num_epochs, 
+                                        bool show_progress,
+                                        int prefetch_batches,
+                                        int num_workers,
+                                        bool shuffle) {
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
     
     // Adaptive batch sizing - starts small and finds optimal size
@@ -324,20 +344,37 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
     int batches_processed = 0;
     const int ADAPTATION_WINDOW = 10;  // Evaluate every 10 batches
     
+    // Create data loader with prefetching enabled
+    Utils::DataLoader::Config loader_config;
+    loader_config.batch_size = current_batch_size;
+    loader_config.prefetch_batches = prefetch_batches;
+    loader_config.num_workers = num_workers;
+    loader_config.shuffle = shuffle;
+    loader_config.queue_capacity = 4;     // Allow up to 4 batches in queue
+    
+    Utils::DataLoader data_loader(dataset, loader_config);
+    logger.info("Using async DataLoader with " + std::to_string(loader_config.num_workers) + 
+                " workers, prefetch=" + std::to_string(loader_config.prefetch_batches));
+    
     for (int epoch = 0; epoch < num_epochs; ++epoch) {
         logger.info("=== Epoch " + std::to_string(epoch + 1) + "/" + std::to_string(num_epochs) + " ===");
         logger.info("Using ADAPTIVE batching (starting batch_size=" + std::to_string(current_batch_size) + ")");
+        
+        // Start epoch with data loader
+        data_loader.start_epoch();
         
         Utils::ProgressBar progress(dataset.size(), "Training", 50);
         
         float epoch_loss = 0.0f;
         double epoch_time = 0.0;
         size_t total_tokens = 0;
+        size_t sequences_processed = 0;
         
         // Detailed timing breakdown
         double total_forward_time = 0.0;
         double total_loss_time = 0.0;
         double total_overhead_time = 0.0;
+        double total_data_wait_time = 0.0;
         
         // Adaptation metrics
         double adaptation_window_time = 0.0;
@@ -345,21 +382,29 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
         
         Utils::Timer epoch_timer;
         
-        // Process dataset in batches for parallel execution
-        for (size_t batch_start = 0; batch_start < dataset.size(); batch_start += current_batch_size) {
-            size_t batch_end = std::min(batch_start + current_batch_size, dataset.size());
-            size_t actual_batch_size = batch_end - batch_start;
+        // Process dataset in batches using data loader
+        while (!data_loader.is_epoch_complete()) {
+            Utils::Timer batch_wait_timer;
+            auto batch = data_loader.get_next_batch();
+            double batch_wait_time = batch_wait_timer.elapsed_ms();
+            total_data_wait_time += batch_wait_time;
+            
+            if (batch.empty()) {
+                break;  // Epoch complete
+            }
+            
+            size_t actual_batch_size = batch.size();
             
             Utils::Timer batch_timer;
             
             // Batch statistics (thread-safe accumulation)
             std::vector<TrainingMetrics> batch_metrics(actual_batch_size);
             
-            // Process batch in parallel using OpenMP
+            // OPTIMIZATION: Process batch in parallel using OpenMP
+            // This overlaps computation while DataLoader prepares next batch
             #pragma omp parallel for schedule(dynamic)
             for (size_t local_idx = 0; local_idx < actual_batch_size; ++local_idx) {
-                size_t global_idx = batch_start + local_idx;
-                batch_metrics[local_idx] = train_step_with_metrics(dataset[global_idx], learning_rate);
+                batch_metrics[local_idx] = train_step_with_metrics(batch[local_idx], learning_rate);
             }
             
             // Accumulate batch results (serial section)
@@ -380,6 +425,7 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
             
             // Track epoch statistics
             total_tokens += batch_tokens;
+            sequences_processed += actual_batch_size;
             double actual_batch_time_ms = batch_timer.elapsed_ms();
             epoch_time += actual_batch_time_ms;
             total_forward_time += batch_forward_time;
@@ -392,7 +438,7 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
             batches_processed++;
             
             // Adaptive batch size adjustment
-            if (batches_processed >= ADAPTATION_WINDOW && batch_end < dataset.size()) {
+            if (batches_processed >= ADAPTATION_WINDOW && !data_loader.is_epoch_complete()) {
                 double current_throughput = (adaptation_window_tokens * 1000.0) / adaptation_window_time;
                 
                 // Try adjusting batch size
@@ -403,19 +449,27 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                     
                     // Try increasing batch size
                     if (current_batch_size < MAX_BATCH_SIZE) {
-                        current_batch_size = std::min(current_batch_size * 2, MAX_BATCH_SIZE);
-                        if (!show_progress) {
-                            logger.debug("Increasing batch size to " + std::to_string(current_batch_size) + 
-                                       " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                        size_t new_batch_size = std::min(current_batch_size * 2, MAX_BATCH_SIZE);
+                        if (new_batch_size != current_batch_size) {
+                            current_batch_size = new_batch_size;
+                            // Note: This affects OpenMP parallel processing, not DataLoader batch size
+                            if (!show_progress) {
+                                logger.debug("Increasing OpenMP batch size to " + std::to_string(current_batch_size) + 
+                                           " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                            }
                         }
                     }
                 } else if (current_throughput < best_throughput * 0.95) {
                     // Performance degraded - revert and try smaller
                     if (current_batch_size > MIN_BATCH_SIZE) {
-                        current_batch_size = std::max(current_batch_size / 2, MIN_BATCH_SIZE);
-                        if (!show_progress) {
-                            logger.debug("Decreasing batch size to " + std::to_string(current_batch_size) + 
-                                       " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                        size_t new_batch_size = std::max(current_batch_size / 2, MIN_BATCH_SIZE);
+                        if (new_batch_size != current_batch_size) {
+                            current_batch_size = new_batch_size;
+                            // Note: This affects OpenMP parallel processing, not DataLoader batch size
+                            if (!show_progress) {
+                                logger.debug("Decreasing OpenMP batch size to " + std::to_string(current_batch_size) + 
+                                           " (throughput: " + std::to_string(current_throughput) + " tokens/sec)");
+                            }
                         }
                     } else {
                         // At minimum, stay there
@@ -433,50 +487,31 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
             }
             
             // Log batch performance periodically (only when not showing progress)
-            if (!show_progress && ((batch_end % 100 == 0) || (batch_end == dataset.size()))) {
+            if (!show_progress && ((sequences_processed % 100 == 0) || data_loader.is_epoch_complete())) {
                 double batch_speedup = batch_total_time / actual_batch_time_ms;
                 double batch_throughput = (batch_tokens * 1000.0) / actual_batch_time_ms;
                 std::ostringstream timing_oss;
                 timing_oss << std::fixed << std::setprecision(2);
-                timing_oss << "Processed " << batch_end << " sequences (batch_size=" << current_batch_size << "): "
+                timing_oss << "Processed " << sequences_processed << " sequences (batch_size=" << current_batch_size << "): "
                           << "Speedup=" << batch_speedup << "x, "
-                          << "Throughput=" << batch_throughput << " tokens/sec";
+                          << "Throughput=" << batch_throughput << " tokens/sec, "
+                          << "Data wait=" << batch_wait_time << "ms";
                 logger.debug(timing_oss.str());
             }
             
-            // Debug trail - log to file only (doesn't interfere with progress bar display)
-            if (show_progress && ((batch_end % 100 == 0) || (batch_end == dataset.size()))) {
-                double batch_speedup = batch_total_time / actual_batch_time_ms;
-                double batch_throughput = (batch_tokens * 1000.0) / actual_batch_time_ms;
-                float avg_loss = epoch_loss / batch_end;
-                double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
-                
-                // Note: Debug logging disabled during progress bar to avoid interfering with display
-                // The metrics are shown in the real-time display instead
-                // std::ostringstream debug_oss;
-                // debug_oss << std::fixed << std::setprecision(2);
-                // debug_oss << "Progress: " << batch_end << "/" << dataset.size() 
-                //           << " (" << (batch_end * 100.0 / dataset.size()) << "%) | "
-                //           << "Loss: " << avg_loss << " | "
-                //           << "Throughput: " << avg_tokens_per_sec << " tok/s | "
-                //           << "Batch: " << current_batch_size << " | "
-                //           << "Speedup: " << batch_speedup << "x";
-                // logger.debug(debug_oss.str());
-            }
-            
             // Update progress bar and metrics display (only every 10 batches or at end)
-            if (show_progress && ((batch_end % 10 == 0) || (batch_end == dataset.size()))) {
+            if (show_progress && ((sequences_processed % 10 == 0) || data_loader.is_epoch_complete())) {
                 // Calculate metrics
-                float avg_loss = epoch_loss / batch_end;
+                float avg_loss = epoch_loss / sequences_processed;
                 double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
                 double elapsed_sec = epoch_timer.elapsed_s();
                 int mins = static_cast<int>(elapsed_sec / 60);
                 int secs = static_cast<int>(elapsed_sec) % 60;
                 
                 // On first iteration, just print. On subsequent iterations, move up and overwrite
-                if (batch_start > 0) {
-                    // Move up 7 lines (6 for metrics + blank line, 1 for progress bar)
-                    Utils::ConsoleDisplay::move_up(7);
+                if (sequences_processed > actual_batch_size) {
+                    // Move up 8 lines (7 for metrics + blank line, 1 for progress bar)
+                    Utils::ConsoleDisplay::move_up(8);
                 }
                 
                 // Print/update metrics block
@@ -494,13 +529,18 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 std::cout << "  Batch size: " << current_batch_size << " (best: " << best_batch_size << ")" << std::endl;
                 
                 Utils::ConsoleDisplay::clear_line();
+                double data_wait_pct = (total_data_wait_time / epoch_time) * 100.0;
+                std::cout << "  Data wait: " << std::fixed << std::setprecision(1) 
+                         << data_wait_pct << "%" << std::endl;
+                
+                Utils::ConsoleDisplay::clear_line();
                 std::cout << "  Elapsed: " << mins << "m " << secs << "s" << std::endl;
                 
                 Utils::ConsoleDisplay::clear_line();
                 std::cout << std::endl;  // Blank line
                 
                 // Update progress bar on its own line
-                progress.update(batch_end);
+                progress.update(sequences_processed);
             }
         }
         
@@ -509,9 +549,10 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
         }
         
         // Print epoch summary with detailed timing breakdown
-        float avg_loss = epoch_loss / dataset.size();
+        float avg_loss = sequences_processed > 0 ? epoch_loss / sequences_processed : 0.0f;
         double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
         double theoretical_speedup = (total_forward_time + total_loss_time) / epoch_time;
+        double data_wait_pct = (total_data_wait_time / epoch_time) * 100.0;
         
         std::ostringstream summary;
         summary << std::fixed << std::setprecision(3);
@@ -530,11 +571,16 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                   << (total_forward_time / epoch_time * 100.0) << "%), "
                   << "Loss: " << (total_loss_time / 1000.0) << "s (" 
                   << (total_loss_time / epoch_time * 100.0) << "%), "
+                  << "Data wait: " << (total_data_wait_time / 1000.0) << "s (" 
+                  << data_wait_pct << "%), "
                   << "Overhead: " << (total_overhead_time / 1000.0) << "s (" 
                   << (total_overhead_time / epoch_time * 100.0) << "%)";
         logger.info(breakdown.str());
         logger.info("");
     }
+    
+    // Stop data loader to clean up threads
+    data_loader.stop();
 }
 
 void AutoregressiveTrainer::save_checkpoint(const std::string& filepath) const {

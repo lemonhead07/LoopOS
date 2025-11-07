@@ -53,6 +53,11 @@ TrainingConfig TrainingConfig::from_json(const json& j) {
     config.kl_coefficient = get_optional<float>(j, "kl_coefficient");
     config.max_length = get_optional<int>(j, "max_length");
     
+    // Data loading optimization parameters
+    config.prefetch_batches = get_optional<int>(j, "prefetch_batches");
+    config.num_workers = get_optional<int>(j, "num_workers");
+    config.shuffle = get_optional<bool>(j, "shuffle");
+    
     return config;
 }
 
