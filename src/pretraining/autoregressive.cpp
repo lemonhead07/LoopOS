@@ -3,7 +3,6 @@
 #include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
 #include "utils/benchmark.hpp"
-#include "utils/progress_bar.hpp"
 #include "utils/serialization.hpp"
 #include "utils/data_loader.hpp"
 #include <cmath>

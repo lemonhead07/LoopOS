@@ -25,6 +25,7 @@ void FineTuner::load_pretrained_weights(const std::string& path) {
     // Load pretrained transformer weights
     // TODO: Implement weight loading
     // model_->load_checkpoint(path);
+    (void)path; // Reserved for future implementation
 }
 
 void FineTuner::train_step(

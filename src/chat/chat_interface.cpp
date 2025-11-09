@@ -23,13 +23,13 @@ using LoopOS::Utils::Logger;
 ChatInterface::ChatInterface(const std::string& model_path,
                            const std::string& tokenizer_path,
                            const std::string& config_path)
-    : model_path_(model_path), 
-      config_path_(config_path),
-      is_initialized_(false),
-      d_model_(256),
+    : d_model_(256),
       num_heads_(8),
       num_layers_(6),
-      max_seq_length_(512) {
+      max_seq_length_(512),
+      is_initialized_(false),
+      model_path_(model_path), 
+      config_path_(config_path) {
     
     // Initialize components
     conversation_ = std::make_unique<ConversationManager>();
@@ -190,6 +190,7 @@ bool ChatInterface::process_command(const std::string& command) {
 void ChatInterface::print_message(const std::string& role, 
                                  const std::string& content,
                                  bool show_stats) {
+    (void)show_stats; // Reserved for future use
     if (role == "user") {
         std::cout << BLUE << BOLD << "You: " << RESET << content << "\n\n";
     } else if (role == "assistant") {

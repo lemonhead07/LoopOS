@@ -20,6 +20,7 @@ ChainOfThought::ChainOfThought(
 void ChainOfThought::load_pretrained_weights(const std::string& path) {
     // TODO: Implement weight loading
     // model_->load_checkpoint(path);
+    (void)path; // Reserved for future implementation
 }
 
 ChainOfThought::ReasoningResult ChainOfThought::solve_with_reasoning(const std::string& problem) {

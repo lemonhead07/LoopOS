@@ -16,7 +16,9 @@ struct KVCache {
     size_t max_length;                        // Maximum cache capacity
     
     KVCache(size_t max_len, int d_model) 
-        : seq_length(0), max_length(max_len) {}
+        : seq_length(0), max_length(max_len) {
+        (void)d_model; // Reserved for future use
+    }
     
     void reset() {
         seq_length = 0;
