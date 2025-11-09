@@ -1,4 +1,5 @@
 #include "math/cpu_matrix.hpp"
+#include "math/opencl_matrix.hpp"
 #include "utils/profiler.hpp"
 #include "utils/logger.hpp"
 #include <cmath>
@@ -604,14 +605,34 @@ MatrixFactory::Backend MatrixFactory::get_backend() {
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols) {
+    if (current_backend_ == Backend::OPENCL) {
+        if (!OpenCLMatrix::is_initialized()) {
+            OpenCLMatrix::initialize_opencl();
+        }
+        return std::make_unique<OpenCLMatrix>(rows, cols);
+    }
     return std::make_unique<CPUMatrix>(rows, cols);
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols, const std::vector<float>& data) {
+    if (current_backend_ == Backend::OPENCL) {
+        if (!OpenCLMatrix::is_initialized()) {
+            OpenCLMatrix::initialize_opencl();
+        }
+        return std::make_unique<OpenCLMatrix>(rows, cols, data);
+    }
     return std::make_unique<CPUMatrix>(rows, cols, data);
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols, float initial_value) {
+    if (current_backend_ == Backend::OPENCL) {
+        if (!OpenCLMatrix::is_initialized()) {
+            OpenCLMatrix::initialize_opencl();
+        }
+        auto mat = std::make_unique<OpenCLMatrix>(rows, cols);
+        mat->fill(initial_value);
+        return mat;
+    }
     return std::make_unique<CPUMatrix>(rows, cols, initial_value);
 }
 

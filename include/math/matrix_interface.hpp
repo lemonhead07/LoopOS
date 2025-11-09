@@ -60,7 +60,8 @@ public:
     enum class Backend {
         CPU_NAIVE,      // Simple C++ implementation
         CPU_OPTIMIZED,  // AVX/SSE optimized
-        CUDA,           // GPU acceleration
+        OPENCL,         // OpenCL GPU acceleration
+        CUDA,           // CUDA GPU acceleration
         BLAS,           // BLAS/LAPACK
         CUSTOM          // User-defined backend
     };
