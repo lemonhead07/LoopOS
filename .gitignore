@@ -53,3 +53,4 @@ _codeql_detected_source_root
 # Keep README files
 !data/pretraining/README.md
 !*/README.md
+data/cache/data_pretraining_wiki_fullEnglish_AA_.vocab_tokenized.bin
