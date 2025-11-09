@@ -66,8 +66,9 @@ add_library(utils STATIC
 # Auto-Encoder Tokenizer Library
 add_library(autoencoder_tokenizer STATIC
     src/utils/tokenizer/fsq_layer.cpp
+    src/utils/tokenizer/character_encoder.cpp
 )
-target_link_libraries(autoencoder_tokenizer utils)
+target_link_libraries(autoencoder_tokenizer utils math_backend)
 
 # Math Library (Abstracted Matrix Backend)
 add_library(math_backend STATIC
@@ -170,5 +171,8 @@ target_link_libraries(model_test
 # Auto-encoder tokenizer tests
 add_executable(test_fsq tests/tokenizer/test_fsq.cpp)
 target_link_libraries(test_fsq autoencoder_tokenizer utils)
+
+add_executable(test_encoder tests/tokenizer/test_encoder.cpp)
+target_link_libraries(test_encoder autoencoder_tokenizer utils math_backend)
 
 
