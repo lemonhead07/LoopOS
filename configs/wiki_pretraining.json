@@ -1,0 +1,45 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 512,
+    "num_heads": 8,
+    "num_layers": 6,
+    "d_ff": 2048
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "autoregressive",
+    "description": "GPT-style pretraining on Wikipedia dataset - Full scale language model"
+  },
+  "training": {
+    "learning_rate": 0.0001,
+    "max_length": 256,
+    "batch_size": 16,
+    "num_epochs": 3,
+    "random_seed": 42
+  },
+  "data": {
+    "input_file": "data/pretraining/wiki/fullEnglish/",
+    "output_dir": "outputs/wiki_pretrained",
+    "tokenizer_vocab": "outputs/tokenizer_wiki.vocab",
+    "max_files": 0,
+    "file_pattern": "**/*",
+    "shuffle": true,
+    "validation_split": 0.05
+  },
+  "generation": {
+    "max_length": 200,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": 40
+  },
+  "profiling": {
+    "enabled": true,
+    "report_top_n": 20
+  },
+  "checkpointing": {
+    "save_every_n_batches": 1000,
+    "keep_last_n": 5,
+    "save_path": "outputs/wiki_pretrained/checkpoints"
+  }
+}
