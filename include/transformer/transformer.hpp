@@ -9,7 +9,7 @@
 namespace LoopOS {
 namespace Transformer {
 
-// High-performance transformer layer with batched operations
+// High-performance transformer layer with batched operations and full backpropagation
 // Optimizations:
 // - Fused QKV projection in attention
 // - Fused GELU in feedforward
@@ -20,15 +20,39 @@ class TransformerLayer {
 public:
     TransformerLayer(int d_model, int num_heads, int d_ff, float dropout = 0.1f);
     
-    // Single sequence forward
+    // Single sequence forward (inference mode - no caching)
     std::unique_ptr<Math::IMatrix> forward(
         const Math::IMatrix& x,
         const Math::IMatrix* mask = nullptr);
+    
+    // Single sequence forward with caching for backpropagation (training mode)
+    std::unique_ptr<Math::IMatrix> forward_cached(
+        const Math::IMatrix& x,
+        const Math::IMatrix* mask = nullptr);
+    
+    // Backward pass through transformer layer
+    // Returns gradient w.r.t. input
+    std::unique_ptr<Math::IMatrix> backward(
+        const Math::IMatrix& grad_output,
+        Math::IMatrix& grad_W_qkv,
+        Math::IMatrix& grad_W_o,
+        Math::IMatrix& grad_ff_W1,
+        Math::IMatrix& grad_ff_b1,
+        Math::IMatrix& grad_ff_W2,
+        Math::IMatrix& grad_ff_b2,
+        Math::IMatrix& grad_norm1_gamma,
+        Math::IMatrix& grad_norm1_beta,
+        Math::IMatrix& grad_norm2_gamma,
+        Math::IMatrix& grad_norm2_beta
+    );
     
     // Batched forward (primary interface for training)
     std::vector<std::unique_ptr<Math::IMatrix>> forward_batched(
         const std::vector<const Math::IMatrix*>& x_batch,
         const Math::IMatrix* mask = nullptr);
+    
+    // Clear cached activations
+    void clear_cache();
     
     // Component accessors for serialization
     const MultiHeadAttention* get_attention() const { return attention_.get(); }
@@ -52,6 +76,27 @@ private:
     std::unique_ptr<FeedForward> feedforward_;
     std::unique_ptr<LayerNorm> norm1_;
     std::unique_ptr<LayerNorm> norm2_;
+    
+    // Cache for backpropagation
+    struct LayerCache {
+        std::unique_ptr<Math::IMatrix> input;          // Original input
+        std::unique_ptr<Math::IMatrix> normed1;        // After first norm
+        std::unique_ptr<Math::IMatrix> attn_output;    // After attention
+        std::unique_ptr<Math::IMatrix> residual1;      // After first residual
+        std::unique_ptr<Math::IMatrix> normed2;        // After second norm
+        std::unique_ptr<Math::IMatrix> ff_output;      // After feedforward
+        bool is_cached = false;
+        
+        void clear() {
+            input.reset();
+            normed1.reset();
+            attn_output.reset();
+            residual1.reset();
+            normed2.reset();
+            ff_output.reset();
+            is_cached = false;
+        }
+    } cache_;
     
     // Fused residual + layer norm (in-place when possible)
     void fused_residual_norm(

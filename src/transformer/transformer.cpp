@@ -60,6 +60,111 @@ std::unique_ptr<Math::IMatrix> TransformerLayer::forward(
     return output;
 }
 
+std::unique_ptr<Math::IMatrix> TransformerLayer::forward_cached(
+    const Math::IMatrix& x,
+    const Math::IMatrix* mask) {
+    PROFILE_FUNCTION();
+    
+    // Clear previous cache
+    cache_.clear();
+    
+    // Cache input
+    cache_.input = x.clone();
+    
+    // Pre-norm architecture with caching for backprop
+    
+    // 1. Self-attention with pre-norm
+    cache_.normed1 = norm1_->forward(x);
+    // Note: attention backward not implemented yet, using forward for now
+    cache_.attn_output = attention_->forward(*cache_.normed1, *cache_.normed1, *cache_.normed1, mask);
+    cache_.residual1 = x.add(*cache_.attn_output);
+    
+    // 2. Feedforward with pre-norm
+    cache_.normed2 = norm2_->forward(*cache_.residual1);
+    cache_.ff_output = feedforward_->forward_cached(*cache_.normed2);
+    auto output = cache_.residual1->add(*cache_.ff_output);
+    
+    cache_.is_cached = true;
+    
+    return output;
+}
+
+std::unique_ptr<Math::IMatrix> TransformerLayer::backward(
+    const Math::IMatrix& grad_output,
+    Math::IMatrix& grad_W_qkv,
+    Math::IMatrix& grad_W_o,
+    Math::IMatrix& grad_ff_W1,
+    Math::IMatrix& grad_ff_b1,
+    Math::IMatrix& grad_ff_W2,
+    Math::IMatrix& grad_ff_b2,
+    Math::IMatrix& grad_norm1_gamma,
+    Math::IMatrix& grad_norm1_beta,
+    Math::IMatrix& grad_norm2_gamma,
+    Math::IMatrix& grad_norm2_beta) {
+    
+    PROFILE_FUNCTION();
+    
+    // Validate cache exists
+    if (!cache_.is_cached) {
+        throw std::runtime_error("No cached activations for backprop. Call forward_cached() first.");
+    }
+    
+    // BACKWARD PASS through transformer layer
+    // Forward was: output = residual1 + feedforward(norm2(residual1))
+    //              residual1 = input + attention(norm1(input))
+    
+    // Step 1: Backprop through second residual connection
+    // output = residual1 + ff_output
+    // grad_residual1_from_residual2 = grad_output (identity)
+    // grad_ff_output = grad_output (identity)
+    auto grad_residual1_from_residual2 = grad_output.clone();
+    auto grad_ff_output = grad_output.clone();
+    
+    // Step 2: Backprop through feedforward
+    auto grad_normed2 = feedforward_->backward(
+        *grad_ff_output,
+        grad_ff_W1,
+        grad_ff_b1,
+        grad_ff_W2,
+        grad_ff_b2
+    );
+    
+    // Step 3: Backprop through second layer norm
+    // Note: LayerNorm backward not fully implemented yet, using simplified version
+    // For now, we'll pass gradient through (identity approximation)
+    auto grad_residual1_from_norm2 = grad_normed2->clone();
+    
+    // Accumulate gradients for residual1 from both paths
+    auto grad_residual1 = grad_residual1_from_residual2->add(*grad_residual1_from_norm2);
+    
+    // Step 4: Backprop through first residual connection
+    // residual1 = input + attn_output
+    // grad_input_from_residual1 = grad_residual1 (identity)
+    // grad_attn_output = grad_residual1 (identity)
+    auto grad_input_from_residual1 = grad_residual1->clone();
+    auto grad_attn_output = grad_residual1->clone();
+    
+    // Step 5: Backprop through attention
+    // Note: Attention backward not implemented yet, using zero gradients
+    // In a full implementation, this would backprop through multi-head attention
+    (void)grad_attn_output;  // Unused for now
+    (void)grad_W_qkv;        // Unused for now
+    (void)grad_W_o;          // Unused for now
+    (void)grad_norm1_gamma;  // Unused for now
+    (void)grad_norm1_beta;   // Unused for now
+    (void)grad_norm2_gamma;  // Unused for now
+    (void)grad_norm2_beta;   // Unused for now
+    
+    // Return gradient w.r.t. input
+    // For now, only feedforward gradients flow back
+    return grad_input_from_residual1;
+}
+
+void TransformerLayer::clear_cache() {
+    cache_.clear();
+    feedforward_->clear_cache();
+}
+
 std::vector<std::unique_ptr<Math::IMatrix>> TransformerLayer::forward_batched(
     const std::vector<const Math::IMatrix*>& x_batch,
     const Math::IMatrix* mask) {
