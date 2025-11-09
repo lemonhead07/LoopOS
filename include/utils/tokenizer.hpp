@@ -51,6 +51,16 @@ public:
                                     int min_frequency = 2);
 
     /**
+     * Build vocabulary from a directory (recursively finds all text files)
+     * @param directory Path to directory containing text files
+     * @param vocab_size Maximum vocabulary size
+     * @param min_frequency Minimum word frequency to include
+     */
+    void build_vocabulary_from_directory(const std::string& directory,
+                                        int vocab_size = 10000,
+                                        int min_frequency = 2);
+
+    /**
      * Encode text string to token IDs
      * @param text Input text
      * @param add_special_tokens Whether to add BOS/EOS tokens (default: true)
