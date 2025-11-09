@@ -1,6 +1,7 @@
 #include "transformer/feedforward.hpp"
 #include "utils/profiler.hpp"
 #include "math/cpu_matrix.hpp"
+#include "math/autograd.hpp"
 #include <cmath>
 #include <stdexcept>
 #include <omp.h>
@@ -97,6 +98,109 @@ std::unique_ptr<Math::IMatrix> FeedForward::forward(const Math::IMatrix& input) 
     }
     
     return output;
+}
+
+std::unique_ptr<Math::IMatrix> FeedForward::forward_cached(const Math::IMatrix& input) {
+    PROFILE_FUNCTION();
+    
+    size_t seq_len = input.rows();
+    
+    // Clear previous cache
+    cache_.clear();
+    
+    // Cache input
+    cache_.input = input.clone();
+    
+    // 1. First linear layer: z1 = input @ W1 + b1
+    cache_.z1 = input.matmul(*W1_);
+    
+    // Add bias to z1
+    const float* bias1_data = b1_->data();
+    float* z1_data = cache_.z1->data();
+    
+    #pragma omp parallel for collapse(2)
+    for (size_t i = 0; i < seq_len; ++i) {
+        for (int j = 0; j < d_ff_; ++j) {
+            z1_data[i * d_ff_ + j] += bias1_data[j];
+        }
+    }
+    
+    // 2. GELU activation: a1 = GELU(z1)
+    cache_.a1 = cache_.z1->clone();
+    gelu_inplace(*cache_.a1);
+    
+    // 3. Second linear layer: z2 = a1 @ W2 + b2
+    cache_.z2 = cache_.a1->matmul(*W2_);
+    
+    // Add bias to z2
+    const float* bias2_data = b2_->data();
+    float* z2_data = cache_.z2->data();
+    
+    #pragma omp parallel for collapse(2)
+    for (size_t i = 0; i < seq_len; ++i) {
+        for (int j = 0; j < d_model_; ++j) {
+            z2_data[i * d_model_ + j] += bias2_data[j];
+        }
+    }
+    
+    cache_.is_cached = true;
+    
+    // Return output (clone of z2)
+    return cache_.z2->clone();
+}
+
+std::unique_ptr<Math::IMatrix> FeedForward::backward(
+    const Math::IMatrix& grad_output,
+    Math::IMatrix& grad_W1,
+    Math::IMatrix& grad_b1,
+    Math::IMatrix& grad_W2,
+    Math::IMatrix& grad_b2) {
+    
+    PROFILE_FUNCTION();
+    
+    // Validate cache exists
+    if (!cache_.is_cached) {
+        throw std::runtime_error("No cached activations for backprop. Call forward_cached() first.");
+    }
+    
+    // BACKWARD PASS through the FeedForward network
+    // Forward was: z2 = GELU(input @ W1 + b1) @ W2 + b2
+    
+    // Step 1: Backprop through second linear layer (z2 = a1 @ W2 + b2)
+    // grad_a1 = grad_output @ W2^T
+    // grad_W2 = a1^T @ grad_output
+    // grad_b2 = sum(grad_output, axis=0)
+    
+    auto grad_a1 = Math::Autograd::linear_backward(
+        *cache_.a1,      // input to second linear
+        *W2_,            // W2
+        grad_output,     // gradient from output
+        grad_W2,         // accumulate W2 gradients
+        &grad_b2         // accumulate b2 gradients
+    );
+    
+    // Step 2: Backprop through GELU activation (a1 = GELU(z1))
+    // grad_z1 = grad_a1 * GELU'(z1)
+    
+    auto grad_z1 = Math::Autograd::gelu_backward(
+        *cache_.z1,      // input to GELU
+        *grad_a1         // gradient from GELU output
+    );
+    
+    // Step 3: Backprop through first linear layer (z1 = input @ W1 + b1)
+    // grad_input = grad_z1 @ W1^T
+    // grad_W1 = input^T @ grad_z1
+    // grad_b1 = sum(grad_z1, axis=0)
+    
+    auto grad_input = Math::Autograd::linear_backward(
+        *cache_.input,   // original input
+        *W1_,            // W1
+        *grad_z1,        // gradient from first linear output
+        grad_W1,         // accumulate W1 gradients
+        &grad_b1         // accumulate b1 gradients
+    );
+    
+    return grad_input;
 }
 
 std::vector<std::unique_ptr<Math::IMatrix>> FeedForward::forward_batched(
