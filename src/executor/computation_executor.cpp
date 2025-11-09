@@ -175,7 +175,15 @@ void ComputationExecutor::run_autoregressive() {
     logger_.info("Loading training data...");
     std::vector<std::vector<int>> sequences;
     if (data_config.input_file.has_value()) {
-        sequences = tokenize_file_with_vocab(data_config.input_file.value(), tokenizer);
+        std::string input_path = data_config.input_file.value();
+        
+        // Check if input is a directory or a file
+        if (std::filesystem::is_directory(input_path)) {
+            logger_.info("Input is a directory, loading all files recursively...");
+            sequences = tokenize_directory_with_vocab(input_path, tokenizer);
+        } else {
+            sequences = tokenize_file_with_vocab(input_path, tokenizer);
+        }
         
         // Chunk long sequences to max_length if specified
         if (training_config.max_length.has_value()) {
@@ -946,6 +954,114 @@ std::vector<std::vector<int>> ComputationExecutor::tokenize_file_with_vocab(cons
     logger_.info("Cached tokenized data to: " + cache_filename);
     
     return sequences;
+}
+
+// Tokenize all files in a directory recursively using vocabulary-based tokenizer
+std::vector<std::vector<int>> ComputationExecutor::tokenize_directory_with_vocab(const std::string& directory, ::Utils::Tokenizer& tokenizer) {
+    PROFILE_FUNCTION();
+    
+    logger_.info("Tokenizing directory with vocabulary tokenizer: " + directory);
+    Utils::Timer tokenize_timer;
+    
+    // Create a cache filename based on the directory path
+    std::string dir_name = directory;
+    std::replace(dir_name.begin(), dir_name.end(), '/', '_');
+    std::string cache_filename = "data/cache/" + dir_name + ".vocab_tokenized.bin";
+    
+    // Ensure cache directory exists
+    std::filesystem::create_directories("data/cache");
+    
+    // Check for cached tokenized data
+    if (std::filesystem::exists(cache_filename)) {
+        logger_.info("Loading from cache: " + cache_filename);
+        auto sequences = load_tokenized_cache(cache_filename);
+        if (!sequences.empty()) {
+            logger_.info("Cache loaded in " + std::to_string(tokenize_timer.elapsed_ms() / 1000.0) + "s");
+            logger_.info("Total sequences: " + std::to_string(sequences.size()));
+            return sequences;
+        }
+    }
+    
+    // Collect all files in directory recursively
+    std::vector<std::string> files;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+        if (entry.is_regular_file()) {
+            files.push_back(entry.path().string());
+        }
+    }
+    
+    if (files.empty()) {
+        logger_.error("No files found in directory: " + directory);
+        return {};
+    }
+    
+    logger_.info("Found " + std::to_string(files.size()) + " files to process");
+    
+    // Process all files
+    std::vector<std::vector<int>> all_sequences;
+    size_t total_tokens = 0;
+    size_t max_seq_len = 0;
+    size_t min_seq_len = std::numeric_limits<size_t>::max();
+    size_t total_lines = 0;
+    
+    for (size_t file_idx = 0; file_idx < files.size(); ++file_idx) {
+        const auto& filepath = files[file_idx];
+        
+        if (file_idx % 10 == 0) {
+            logger_.info("Processing file " + std::to_string(file_idx + 1) + "/" + 
+                        std::to_string(files.size()) + ": " + filepath);
+        }
+        
+        // Read file line by line and tokenize
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            logger_.error("Cannot open file: " + filepath);
+            continue;
+        }
+        
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.empty()) continue;
+            
+            // Encode the line using the tokenizer
+            auto tokens = tokenizer.encode(line, false);  // Don't add BOS/EOS for each line
+            
+            if (!tokens.empty()) {
+                total_tokens += tokens.size();
+                max_seq_len = std::max(max_seq_len, tokens.size());
+                min_seq_len = std::min(min_seq_len, tokens.size());
+                all_sequences.push_back(std::move(tokens));
+            }
+            
+            total_lines++;
+            if (total_lines % 50000 == 0) {
+                logger_.info("Processed " + std::to_string(total_lines) + " lines, " + 
+                           std::to_string(all_sequences.size()) + " sequences...");
+            }
+        }
+        file.close();
+    }
+    
+    double tokenize_time = tokenize_timer.elapsed_ms();
+    
+    logger_.info("Tokenization complete in " + std::to_string(tokenize_time / 1000.0) + "s");
+    logger_.info("Processed " + std::to_string(files.size()) + " files");
+    logger_.info("Total sequences: " + std::to_string(all_sequences.size()));
+    logger_.info("Total tokens: " + std::to_string(total_tokens));
+    if (all_sequences.size() > 0) {
+        logger_.info("Avg sequence length: " + std::to_string(total_tokens / all_sequences.size()));
+    }
+    if (min_seq_len != std::numeric_limits<size_t>::max()) {
+        logger_.info("Min sequence length: " + std::to_string(min_seq_len));
+    }
+    logger_.info("Max sequence length: " + std::to_string(max_seq_len));
+    logger_.info("Throughput: " + std::to_string(total_tokens / (tokenize_time / 1000.0)) + " tokens/sec");
+    
+    // Cache tokenized data for future runs
+    save_tokenized_cache(cache_filename, all_sequences);
+    logger_.info("Cached tokenized data to: " + cache_filename);
+    
+    return all_sequences;
 }
 
 // Helper function to create output directory
