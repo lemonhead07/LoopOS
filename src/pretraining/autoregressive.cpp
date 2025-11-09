@@ -416,49 +416,7 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
         }
         
         // Apply softmax to logits
-        auto& logits = logits_batch[b];
-        
-        // DEBUG: Check logits before softmax
-        float min_logit = logits->at(0, 0);
-        float max_logit = logits->at(0, 0);
-        bool has_nan_logits = false;
-        for (size_t i = 0; i < logits->rows(); ++i) {
-            for (size_t j = 0; j < logits->cols(); ++j) {
-                float val = logits->at(i, j);
-                min_logit = std::min(min_logit, val);
-                max_logit = std::max(max_logit, val);
-                if (std::isnan(val) || std::isinf(val)) {
-                    has_nan_logits = true;
-                }
-            }
-        }
-        
-        if (has_nan_logits || max_logit > 1e10f || min_logit < -1e10f) {
-            std::cout << "  [Batch " << b << "] Logits BEFORE softmax: min=" << min_logit 
-                      << ", max=" << max_logit << ", has_nan/inf=" << has_nan_logits << std::endl;
-        }
-        
         auto probs = logits_batch[b]->softmax(1);
-        
-        // DEBUG: Check dimensions
-        if (targets_batch[b].size() != probs->rows()) {
-            std::cout << "  [Batch " << b << "] DIMENSION MISMATCH! targets.size()=" 
-                      << targets_batch[b].size() << ", probs->rows()=" << probs->rows() << std::endl;
-        }
-        
-        // DEBUG: Check if softmax produced NaN
-        bool has_nan_probs = false;
-        for (size_t i = 0; i < std::min(targets_batch[b].size(), probs->rows()); ++i) {
-            for (size_t j = 0; j < probs->cols(); ++j) {
-                if (std::isnan(probs->at(i, j)) || std::isinf(probs->at(i, j))) {
-                    has_nan_probs = true;
-                    std::cout << "  [Batch " << b << "] Softmax output has NaN/Inf at position ("
-                              << i << ", " << j << "): " << probs->at(i, j) << std::endl;
-                    break;
-                }
-            }
-            if (has_nan_probs) break;
-        }
         
         // Compute cross-entropy loss
         float seq_loss = 0.0f;
@@ -469,77 +427,17 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
             int target_token = targets[i];
             if (target_token >= 0 && target_token < vocab_size_) {
                 float target_prob = probs->at(i, target_token);
-                
-                // DEBUG: Log if we get bad probability
-                if (std::isnan(target_prob) || std::isinf(target_prob) || target_prob <= 0.0f) {
-                    std::cout << "  [Batch " << b << ", Token " << i << "] target_prob=" << target_prob 
-                              << " for token_id=" << target_token << std::endl;
-                }
-                
                 target_prob = std::max(target_prob, 1e-10f);  // Prevent log(0)
                 float token_loss = -std::log(target_prob);
-                
-                // Sanity check
-                if (std::isnan(token_loss) || std::isinf(token_loss)) {
-                    // Log first occurrence
-                    static bool logged = false;
-                    if (!logged) {
-                        Utils::Logger::instance().log(Utils::LogLevel::ERROR, "AUTOREGRESSIVE",
-                            "NaN/Inf loss: target_prob=" + std::to_string(target_prob) + 
-                            ", token=" + std::to_string(target_token) + 
-                            ", pos=" + std::to_string(i));
-                        logged = true;
-                    }
-                    // Use a large finite value instead
-                    token_loss = 100.0f;
-                }
-                
                 seq_loss += token_loss;
-                
-                // DEBUG: Check if seq_loss became NaN after this token
-                if (std::isnan(seq_loss)) {
-                    std::cout << "  [Batch " << b << ", Token " << i << "] seq_loss became NaN! "
-                              << "token_loss=" << token_loss << ", target_prob=" << target_prob << std::endl;
-                }
             }
         }
         
         float avg_seq_loss = seq_loss / static_cast<float>(targets.size());
         
-        // DEBUG: FORCE check for NaN with string comparison
-        std::string loss_str = std::to_string(avg_seq_loss);
-        std::string seq_loss_str = std::to_string(seq_loss);
-        bool is_nan_by_string = (loss_str.find("nan") != std::string::npos) || 
-                                (seq_loss_str.find("nan") != std::string::npos);
-        bool is_nan_by_check = std::isnan(avg_seq_loss) || std::isnan(seq_loss);
-        
-        if (is_nan_by_string || is_nan_by_check || avg_seq_loss != avg_seq_loss || seq_loss != seq_loss) {
-            std::cout << "***** NaN detected in Seq " << b << " *****" << std::endl;
-            std::cout << "  avg_seq_loss=" << avg_seq_loss << ", seq_loss=" << seq_loss 
-                      << ", targets.size()=" << targets.size() << std::endl;
-            std::cout << "  is_nan_by_string=" << is_nan_by_string << ", is_nan_by_check=" << is_nan_by_check << std::endl;
-            std::cout << "  self-compare: avg!= avg: " << (avg_seq_loss != avg_seq_loss) 
-                      << ", seq != seq: " << (seq_loss != seq_loss) << std::endl;
-            std::cout << "  probs dims: " << probs->rows() << "x" << probs->cols() << std::endl;
-            std::cout << "  First few probs[0]: ";
-            for (size_t j = 0; j < std::min((size_t)10, probs->cols()); ++j) {
-                std::cout << probs->at(0, j) << " ";
-            }
-            std::cout << std::endl;
-            
-            // Print logits stats that were computed earlier
-            std::cout << "  Logits BEFORE softmax: min=" << min_logit << ", max=" << max_logit 
-                      << ", has_nan/inf=" << has_nan_logits << std::endl;
-        }
-        
         total_batch_loss += avg_seq_loss;
         total_tokens += targets.size();
         valid_sequences++;
-        
-        // DEBUG: Print every sequence loss
-        std::cout << "Seq " << b << ": loss=" << avg_seq_loss 
-                  << " (seq_loss=" << seq_loss 
-                  << ", targets=" << targets.size() << ")" << std::endl;
         
         // Fill in metrics
         metrics[b].sequence_length = inputs.size();
