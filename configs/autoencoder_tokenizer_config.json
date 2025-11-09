@@ -1,0 +1,73 @@
+{
+  "tokenizer_type": "autoencoder",
+  "version": "1.0.0",
+  
+  "architecture": {
+    "d_char": 64,
+    "d_latent": 8,
+    "max_chunk_size": 16,
+    "char_vocab_size": 256
+  },
+  
+  "encoder": {
+    "conv_channels": [128, 256, 256],
+    "kernel_sizes": [3, 3, 3],
+    "strides": [1, 2, 2],
+    "activation": "relu",
+    "pooling": "global_avg"
+  },
+  
+  "fsq": {
+    "levels": [8, 8, 8, 8, 8, 5, 5, 5],
+    "num_dimensions": 8,
+    "total_vocab_size": 4096000
+  },
+  
+  "decoder": {
+    "deconv_channels": [256, 256, 128, 256],
+    "kernel_sizes": [3, 3, 3, 3],
+    "strides": [2, 2, 1, 1],
+    "activation": "relu",
+    "output_activation": "softmax"
+  },
+  
+  "special_tokens": {
+    "pad_id": 0,
+    "unk_id": 1,
+    "bos_id": 2,
+    "eos_id": 3,
+    "first_regular_id": 4
+  },
+  
+  "training": {
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "max_epochs": 100,
+    "checkpoint_interval": 1000,
+    "validation_split": 0.1,
+    "early_stopping_patience": 5,
+    "target_char_accuracy": 0.95
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "enable_profiling": true,
+    "log_directory": "logs/tokenizer",
+    "save_metrics": true,
+    "metrics_file": "logs/tokenizer/metrics.json"
+  },
+  
+  "performance": {
+    "use_simd": true,
+    "num_threads": 4,
+    "cache_encodings": true,
+    "batch_processing": true
+  },
+  
+  "paths": {
+    "model_save_dir": "models/autoencoder_tokenizer",
+    "checkpoint_dir": "checkpoints/tokenizer",
+    "training_data": "data/training_corpus.txt",
+    "validation_data": "data/validation_corpus.txt"
+  }
+}
