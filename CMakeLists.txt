@@ -67,6 +67,7 @@ add_library(utils STATIC
 add_library(autoencoder_tokenizer STATIC
     src/utils/tokenizer/fsq_layer.cpp
     src/utils/tokenizer/character_encoder.cpp
+    src/utils/tokenizer/vector_decoder.cpp
 )
 target_link_libraries(autoencoder_tokenizer utils math_backend)
 
@@ -174,5 +175,8 @@ target_link_libraries(test_fsq autoencoder_tokenizer utils)
 
 add_executable(test_encoder tests/tokenizer/test_encoder.cpp)
 target_link_libraries(test_encoder autoencoder_tokenizer utils math_backend)
+
+add_executable(test_decoder tests/tokenizer/test_decoder.cpp)
+target_link_libraries(test_decoder autoencoder_tokenizer utils math_backend)
 
 
