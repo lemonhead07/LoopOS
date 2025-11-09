@@ -29,6 +29,32 @@ struct KVCache {
     }
 };
 
+// Cache structure for storing intermediate activations during forward pass
+struct AttentionCache {
+    std::unique_ptr<Math::IMatrix> input;           // Original input (query)
+    std::unique_ptr<Math::IMatrix> Q;               // Query after projection
+    std::unique_ptr<Math::IMatrix> K;               // Key after projection  
+    std::unique_ptr<Math::IMatrix> V;               // Value after projection
+    std::unique_ptr<Math::IMatrix> scores;          // Attention scores (Q @ K^T / sqrt(d_k))
+    std::unique_ptr<Math::IMatrix> attn_weights;    // After softmax
+    std::unique_ptr<Math::IMatrix> context;         // Context vectors (attn_weights @ V)
+    const Math::IMatrix* mask;                      // Attention mask (not owned)
+    
+    bool is_cached = false;
+    
+    void clear() {
+        input.reset();
+        Q.reset();
+        K.reset();
+        V.reset();
+        scores.reset();
+        attn_weights.reset();
+        context.reset();
+        mask = nullptr;
+        is_cached = false;
+    }
+};
+
 // High-performance batched multi-head attention
 // Processes (batch_size, seq_len, d_model) tensors natively
 class MultiHeadAttention {
@@ -57,6 +83,28 @@ public:
         KVCache* cache = nullptr,
         const Math::IMatrix* mask = nullptr);
     
+    // Backward pass for multi-head attention
+    // Returns gradient w.r.t. input (query)
+    // Accumulates gradients w.r.t. weights into grad_W_qkv and grad_W_o
+    std::unique_ptr<Math::IMatrix> backward(
+        const Math::IMatrix& grad_output,
+        Math::IMatrix& grad_W_qkv,
+        Math::IMatrix& grad_W_o
+    );
+    
+    // Forward pass with caching for backpropagation (training mode)
+    std::unique_ptr<Math::IMatrix> forward_cached(
+        const Math::IMatrix& query,
+        const Math::IMatrix& key,
+        const Math::IMatrix& value,
+        const Math::IMatrix* mask = nullptr);
+    
+    // Clear cached activations
+    void clear_cache() { cache_.clear(); }
+    
+    // Check if activations are cached
+    bool has_cache() const { return cache_.is_cached; }
+    
     // Create a new KV cache for this attention layer
     std::unique_ptr<KVCache> create_cache(size_t max_length) const;
     
@@ -76,6 +124,9 @@ private:
     // Weight matrices (shared across batch)
     std::unique_ptr<Math::IMatrix> W_qkv_;  // Fused Q, K, V projection (d_model, 3*d_model)
     std::unique_ptr<Math::IMatrix> W_o_;
+    
+    // Cache for backpropagation
+    AttentionCache cache_;
     
     void initialize_weights();
     

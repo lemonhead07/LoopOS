@@ -59,15 +59,17 @@ void FeedForward::fused_linear_gelu(
     // Linear: output = input @ weight
     auto linear_out = input.matmul(weight);
     
-    // Add bias and apply GELU in single pass
+    // Add bias and apply GELU in single pass (OpenMP optimized)
     const float* linear_data = linear_out->data();
     const float* bias_data = bias.data();
     float* output_data = output.data();
     
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < seq_len; ++i) {
+        size_t row_offset = i * out_dim;
+        #pragma omp simd
         for (size_t j = 0; j < out_dim; ++j) {
-            size_t idx = i * out_dim + j;
+            size_t idx = row_offset + j;
             float val = linear_data[idx] + bias_data[j];
             output_data[idx] = fast_gelu(val);
         }
@@ -86,14 +88,16 @@ std::unique_ptr<Math::IMatrix> FeedForward::forward(const Math::IMatrix& input) 
     // 2. Second layer (linear only)
     auto output = hidden->matmul(*W2_);
     
-    // Add bias
+    // Add bias (parallelized)
     const float* bias_data = b2_->data();
     float* output_data = output->data();
     
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < seq_len; ++i) {
+        size_t row_offset = i * d_model_;
+        #pragma omp simd
         for (int j = 0; j < d_model_; ++j) {
-            output_data[i * d_model_ + j] += bias_data[j];
+            output_data[row_offset + j] += bias_data[j];
         }
     }
     
@@ -114,14 +118,16 @@ std::unique_ptr<Math::IMatrix> FeedForward::forward_cached(const Math::IMatrix& 
     // 1. First linear layer: z1 = input @ W1 + b1
     cache_.z1 = input.matmul(*W1_);
     
-    // Add bias to z1
+    // Add bias to z1 (parallelized)
     const float* bias1_data = b1_->data();
     float* z1_data = cache_.z1->data();
     
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < seq_len; ++i) {
+        size_t row_offset = i * d_ff_;
+        #pragma omp simd
         for (int j = 0; j < d_ff_; ++j) {
-            z1_data[i * d_ff_ + j] += bias1_data[j];
+            z1_data[row_offset + j] += bias1_data[j];
         }
     }
     
@@ -132,14 +138,16 @@ std::unique_ptr<Math::IMatrix> FeedForward::forward_cached(const Math::IMatrix& 
     // 3. Second linear layer: z2 = a1 @ W2 + b2
     cache_.z2 = cache_.a1->matmul(*W2_);
     
-    // Add bias to z2
+    // Add bias to z2 (parallelized)
     const float* bias2_data = b2_->data();
     float* z2_data = cache_.z2->data();
     
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < seq_len; ++i) {
+        size_t row_offset = i * d_model_;
+        #pragma omp simd
         for (int j = 0; j < d_model_; ++j) {
-            z2_data[i * d_model_ + j] += bias2_data[j];
+            z2_data[row_offset + j] += bias2_data[j];
         }
     }
     
