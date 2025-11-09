@@ -136,6 +136,7 @@ void MatrixBenchmark::benchmark_elementwise(size_t rows, size_t cols, size_t ite
     double relu_time = timer.elapsed_ms();
     
     size_t ops = rows * cols * iterations;
+    (void)ops; // Reserved for future metrics
     size_t bytes = rows * cols * sizeof(float) * iterations;
     
     std::ostringstream oss;

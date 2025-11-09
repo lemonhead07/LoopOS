@@ -42,6 +42,7 @@ std::unique_ptr<Math::IMatrix> TransformerLayer::forward(
     PROFILE_FUNCTION();
     
     size_t seq_len = x.rows();
+    (void)seq_len; // Reserved for future sequence length validation
     
     // Pre-norm architecture: norm -> attention -> residual
     // More stable for deep networks

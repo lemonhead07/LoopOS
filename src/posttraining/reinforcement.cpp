@@ -29,6 +29,7 @@ void ReinforcementTrainer::load_pretrained_weights(const std::string& path) {
     // Load pretrained weights for policy model
     // TODO: Implement weight loading
     // policy_model_->load_weights(path);
+    (void)path; // Reserved for future implementation
 }
 
 void ReinforcementTrainer::train_reward_model(

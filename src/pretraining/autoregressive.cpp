@@ -3,7 +3,6 @@
 #include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
 #include "utils/benchmark.hpp"
-#include "utils/progress_bar.hpp"
 #include "utils/serialization.hpp"
 #include "utils/data_loader.hpp"
 #include <cmath>
@@ -519,6 +518,7 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 int mins = static_cast<int>(elapsed_sec / 60);
                 int secs = static_cast<int>(elapsed_sec) % 60;
                 double data_wait_pct = (total_data_wait_time / epoch_time) * 100.0;
+                (void)mins; (void)secs; (void)data_wait_pct; // Reserved for detailed time display
                 
                 // Build single-line display with progress bar and metrics
                 float progress_pct = (static_cast<float>(sequences_processed) / total_sequences) * 100.0f;

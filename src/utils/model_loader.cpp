@@ -133,6 +133,7 @@ bool ModelLoader::validate_checkpoint(const std::string& checkpoint_path) {
         
         // Try to read header
         uint32_t version = Serialization::read_header(file);
+        (void)version; // Reserved for version checking
         
         // Try to read metadata
         auto metadata = Serialization::read_metadata(file);
