@@ -41,6 +41,7 @@ data/pretraining/text/
 data/pretraining/embeddings/
 data/pretraining/tokenized/
 data/pretraining/processed/
+data/pretraining/wiki/
 
 # Output directories
 outputs/

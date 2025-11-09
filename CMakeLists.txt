@@ -75,6 +75,8 @@ target_link_libraries(autoencoder_tokenizer utils math_backend)
 # Math Library (Abstracted Matrix Backend)
 add_library(math_backend STATIC
     src/math/cpu_matrix.cpp
+    src/math/parameter.cpp
+    src/math/autograd.cpp
     src/utils/memory_manager.cpp
     src/utils/benchmark.cpp
 )
@@ -161,6 +163,15 @@ target_link_libraries(chat_bot
 add_executable(build_tokenizer src/build_tokenizer.cpp)
 target_link_libraries(build_tokenizer utils)
 
+# Vocabulary-based training executable
+add_executable(train_vocab src/train_vocab.cpp)
+target_link_libraries(train_vocab
+    pretraining
+    transformer
+    math_backend
+    utils
+)
+
 # Model test executable
 add_executable(model_test src/model_test.cpp)
 target_link_libraries(model_test
@@ -174,8 +185,12 @@ target_link_libraries(model_test
 add_executable(test_fsq tests/tokenizer/test_fsq.cpp)
 target_link_libraries(test_fsq autoencoder_tokenizer utils)
 
-add_executable(test_encoder tests/tokenizer/test_encoder.cpp)
-target_link_libraries(test_encoder autoencoder_tokenizer utils math_backend)
+# Test executables
+add_executable(test_forward test_forward.cpp)
+target_link_libraries(test_forward PRIVATE transformer executor utils math_backend)
+
+#add_executable(test_encoder tests/test_encoder.cpp)
+#target_link_libraries(test_encoder PRIVATE transformer executor utils math_backend)
 
 add_executable(test_decoder tests/tokenizer/test_decoder.cpp)
 target_link_libraries(test_decoder autoencoder_tokenizer utils math_backend)

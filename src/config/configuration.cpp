@@ -25,7 +25,7 @@ ModelConfig ModelConfig::from_json(const json& j) {
     config.num_heads = j["num_heads"].get<int>();
     config.num_layers = j["num_layers"].get<int>();
     config.d_ff = j["d_ff"].get<int>();
-    config.vocab_size = j["vocab_size"].get<int>();
+    config.vocab_size = get_optional<int>(j, "vocab_size");  // Optional - auto-calculated from tokenizer
     config.num_classes = get_optional<int>(j, "num_classes");
     return config;
 }
@@ -195,7 +195,9 @@ void Configuration::print_summary() const {
     logger.info("  num_heads: " + std::to_string(model_config_.num_heads));
     logger.info("  num_layers: " + std::to_string(model_config_.num_layers));
     logger.info("  d_ff: " + std::to_string(model_config_.d_ff));
-    logger.info("  vocab_size: " + std::to_string(model_config_.vocab_size));
+    if (model_config_.vocab_size.has_value()) {
+        logger.info("  vocab_size: " + std::to_string(model_config_.vocab_size.value()));
+    }
     if (model_config_.num_classes.has_value()) {
         logger.info("  num_classes: " + std::to_string(model_config_.num_classes.value()));
     }

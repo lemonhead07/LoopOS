@@ -1,0 +1,51 @@
+{
+  "description": "Tokenizer training configuration for FULL Wikipedia dataset",
+  "version": "1.0.0",
+  
+  "data": {
+    "source_directory": "data/pretraining/wiki/fullEnglish/",
+    "file_pattern": "**/*.txt",
+    "sample_strategy": "shuffled",
+    "sample_size_mb": 0,
+    "max_training_time_minutes": 0,
+    "validation_split": 0.1,
+    "comment": "All files will be processed in randomized order"
+  },
+  
+  "tokenizer": {
+    "vocab_size": 50000,
+    "min_frequency": 10,
+    "output_path": "outputs/tokenizer_wiki.vocab"
+  },
+  
+  "special_tokens": {
+    "pad": "<pad>",
+    "unk": "<unk>",
+    "bos": "<bos>",
+    "eos": "<eos>",
+    "user": "<|user|>",
+    "assistant": "<|assistant|>",
+    "system": "<|system|>"
+  },
+  
+  "processing": {
+    "max_files": 0,
+    "chunk_size_mb": 10,
+    "parallel_processing": true,
+    "num_threads": 8,
+    "comment": "max_files: 0 = process all files in shuffled order"
+  },
+  
+  "performance": {
+    "use_simd": true,
+    "cache_encodings": false,
+    "memory_limit_mb": 2048
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "log_directory": "logs/tokenizer",
+    "save_stats": true,
+    "stats_file": "logs/tokenizer/wiki_training_stats.json"
+  }
+}

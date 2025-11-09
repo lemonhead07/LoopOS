@@ -546,6 +546,9 @@ std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
                 sum_exp += exp_val;
             }
             
+            // Add epsilon to prevent division by zero
+            sum_exp = std::max(sum_exp, 1e-20f);
+            
             for (size_t j = 0; j < cols_; ++j) {
                 result->at(i, j) /= sum_exp;
             }
@@ -565,6 +568,9 @@ std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
                 result->at(i, j) = exp_val;
                 sum_exp += exp_val;
             }
+            
+            // Add epsilon to prevent division by zero
+            sum_exp = std::max(sum_exp, 1e-20f);
             
             for (size_t i = 0; i < rows_; ++i) {
                 result->at(i, j) /= sum_exp;

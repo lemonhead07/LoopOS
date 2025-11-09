@@ -3,6 +3,7 @@
 #include "pretraining/autoregressive.hpp"
 #include "utils/logger.hpp"
 #include "utils/tokenizer.hpp"
+#include "utils/serialization.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -112,7 +113,7 @@ int generate_from_checkpoint(const std::string& checkpoint_path, const std::vect
     // Parse options
     int length = 50;
     std::vector<int> prompt = {1, 2, 3};
-    std::string tokenizer_path = "outputs/tokenizer.vocab";
+    std::string tokenizer_path = "outputs/tokenizer_wiki.vocab";  // Default to wiki tokenizer
     bool decode_output = true;
     
     for (size_t i = 0; i < extra_args.size(); i++) {
@@ -143,26 +144,58 @@ int generate_from_checkpoint(const std::string& checkpoint_path, const std::vect
     logger.info("Generation length: " + std::to_string(length));
     logger.info("");
     
-    // Load tokenizer if available
-    std::unique_ptr<Utils::Tokenizer> tokenizer;
-    if (decode_output) {
-        try {
-            tokenizer = std::make_unique<Utils::Tokenizer>();
-            tokenizer->load(tokenizer_path);
-            logger.info("Tokenizer loaded from: " + tokenizer_path);
-        } catch (const std::exception& e) {
-            logger.warning("Could not load tokenizer: " + std::string(e.what()));
-            logger.warning("Output will be shown as token IDs only");
-            decode_output = false;
+    // Read model architecture from checkpoint BEFORE creating model
+    int vocab_size = 10000;  // Default fallback
+    int d_model = 256, num_heads = 8, num_layers = 2, d_ff = 1024;
+    
+    try {
+        std::ifstream file(checkpoint_path, std::ios::binary);
+        if (!file.is_open()) {
+            throw std::runtime_error("Failed to open checkpoint file");
         }
+        
+        // Read header
+        LoopOS::Utils::Serialization::read_header(file);
+        
+        // Read architecture metadata
+        auto metadata = LoopOS::Utils::Serialization::read_metadata(file);
+        d_model = metadata.d_model;
+        num_heads = metadata.num_heads;
+        num_layers = metadata.num_layers;
+        d_ff = metadata.d_ff;
+        vocab_size = metadata.vocab_size;
+        
+        logger.info("Loaded architecture from checkpoint:");
+        logger.info("  d_model=" + std::to_string(d_model) + 
+                   ", num_heads=" + std::to_string(num_heads) +
+                   ", num_layers=" + std::to_string(num_layers));
+        logger.info("  d_ff=" + std::to_string(d_ff) + 
+                   ", vocab_size=" + std::to_string(vocab_size));
+        logger.info("");
+        
+    } catch (const std::exception& e) {
+        logger.warning("Could not read architecture from checkpoint: " + std::string(e.what()));
+        logger.warning("Using default architecture");
+    }
+    
+    // Load tokenizer to get vocab size
+    std::unique_ptr<Utils::Tokenizer> tokenizer;
+    
+    try {
+        tokenizer = std::make_unique<Utils::Tokenizer>();
+        tokenizer->load(tokenizer_path);
+        logger.info("Tokenizer loaded from: " + tokenizer_path);
+        logger.info("Tokenizer vocab_size: " + std::to_string(tokenizer->vocab_size()));
+    } catch (const std::exception& e) {
+        logger.warning("Could not load tokenizer: " + std::string(e.what()));
+        logger.warning("Output will be shown as token IDs only");
+        decode_output = false;
     }
     
     try {
-        // Note: We need to infer model architecture from checkpoint
-        // For now, use the standard config (256, 8, 2, 1024, 10000)
-        // TODO: Store architecture in checkpoint header and read it
-        logger.info("Loading model checkpoint...");
-        LoopOS::PreTraining::AutoregressiveTrainer trainer(256, 8, 2, 1024, 10000);
+        // Create model with architecture from checkpoint
+        logger.info("Creating model with checkpoint architecture...");
+        LoopOS::PreTraining::AutoregressiveTrainer trainer(d_model, num_heads, num_layers, d_ff, vocab_size);
         trainer.load_checkpoint(checkpoint_path);
         logger.info("Model loaded successfully!");
         logger.info("");

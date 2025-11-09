@@ -99,7 +99,9 @@ void ComputationExecutor::run_autoregressive() {
     logger_.info("  d_model: " + std::to_string(model_config.d_model));
     logger_.info("  num_heads: " + std::to_string(model_config.num_heads));
     logger_.info("  num_layers: " + std::to_string(model_config.num_layers));
-    logger_.info("  vocab_size: " + std::to_string(model_config.vocab_size));
+    if (model_config.vocab_size.has_value()) {
+        logger_.info("  vocab_size (config): " + std::to_string(model_config.vocab_size.value()));
+    }
     
     logger_.info("Training parameters:");
     logger_.info("  learning_rate: " + std::to_string(training_config.learning_rate));
@@ -120,20 +122,60 @@ void ComputationExecutor::run_autoregressive() {
     
     logger_.info("");
     
-    // Initialize trainer
+    // Build or load tokenizer vocabulary
+    logger_.info("=== Building Tokenizer Vocabulary ===");
+    ::Utils::Tokenizer tokenizer;
+    
+    std::string vocab_path;
+    if (data_config.output_dir.has_value()) {
+        vocab_path = data_config.output_dir.value() + "/tokenizer.vocab";
+    } else {
+        vocab_path = "outputs/tokenizer.vocab";
+    }
+    
+    // Check if vocabulary already exists
+    if (std::filesystem::exists(vocab_path)) {
+        logger_.info("Loading existing vocabulary from: " + vocab_path);
+        tokenizer.load(vocab_path);
+        logger_.info("Vocabulary loaded: " + std::to_string(tokenizer.vocab_size()) + " tokens");
+    } else {
+        // Build vocabulary from training data
+        if (!data_config.input_file.has_value()) {
+            throw std::runtime_error("Cannot build vocabulary without input file");
+        }
+        
+        logger_.info("Building vocabulary from: " + data_config.input_file.value());
+        int max_vocab = model_config.vocab_size.value_or(10000);  // Default 10000 if not specified
+        tokenizer.build_vocabulary(data_config.input_file.value(), 
+                                   max_vocab, 
+                                   2);  // min_frequency = 2
+        
+        // Save vocabulary
+        logger_.info("Saving vocabulary to: " + vocab_path);
+        tokenizer.save(vocab_path);
+        logger_.info("Vocabulary saved: " + std::to_string(tokenizer.vocab_size()) + " tokens");
+    }
+    
+    // Use actual vocab size from tokenizer
+    int actual_vocab_size = static_cast<int>(tokenizer.vocab_size());
+    logger_.info("Using actual vocab_size from tokenizer: " + std::to_string(actual_vocab_size));
+    
+    logger_.info("");
+    
+    // Initialize trainer with actual vocab size
     PreTraining::AutoregressiveTrainer trainer(
         model_config.d_model,
         model_config.num_heads,
         model_config.num_layers,
         model_config.d_ff,
-        model_config.vocab_size
+        actual_vocab_size
     );
     
     // Load and tokenize data
     logger_.info("Loading training data...");
     std::vector<std::vector<int>> sequences;
     if (data_config.input_file.has_value()) {
-        sequences = tokenize_file(data_config.input_file.value(), model_config.vocab_size);
+        sequences = tokenize_file_with_vocab(data_config.input_file.value(), tokenizer);
         
         // Chunk long sequences to max_length if specified
         if (training_config.max_length.has_value()) {
@@ -170,7 +212,7 @@ void ComputationExecutor::run_autoregressive() {
         for (int i = 0; i < 10; ++i) {
             std::vector<int> seq;
             for (int j = 0; j < 20; ++j) {
-                seq.push_back(rand() % model_config.vocab_size);
+                seq.push_back(rand() % actual_vocab_size);
             }
             sequences.push_back(seq);
         }
@@ -239,7 +281,8 @@ void ComputationExecutor::run_masked_lm() {
     logger_.info("  d_model: " + std::to_string(model_config.d_model));
     logger_.info("  num_heads: " + std::to_string(model_config.num_heads));
     logger_.info("  num_layers: " + std::to_string(model_config.num_layers));
-    logger_.info("  vocab_size: " + std::to_string(model_config.vocab_size));
+    int vocab_size = model_config.vocab_size.value_or(10000);
+    logger_.info("  vocab_size: " + std::to_string(vocab_size));
     
     logger_.info("Training parameters:");
     logger_.info("  learning_rate: " + std::to_string(training_config.learning_rate));
@@ -268,21 +311,21 @@ void ComputationExecutor::run_masked_lm() {
         model_config.num_heads,
         model_config.num_layers,
         model_config.d_ff,
-        model_config.vocab_size
+        vocab_size
     );
     
     // Load training data
     logger_.info("Loading training data...");
     std::vector<std::vector<int>> sequences;
     if (data_config.input_file.has_value()) {
-        sequences = tokenize_file(data_config.input_file.value(), model_config.vocab_size);
+        sequences = tokenize_file(data_config.input_file.value(), vocab_size);
         logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
     } else {
         logger_.warning("No input file specified, using dummy data");
         for (int i = 0; i < 10; ++i) {
             std::vector<int> seq;
             for (int j = 0; j < 20; ++j) {
-                seq.push_back(rand() % model_config.vocab_size);
+                seq.push_back(rand() % vocab_size);
             }
             sequences.push_back(seq);
         }
@@ -345,7 +388,8 @@ void ComputationExecutor::run_contrastive() {
     logger_.info("  d_model: " + std::to_string(model_config.d_model));
     logger_.info("  num_heads: " + std::to_string(model_config.num_heads));
     logger_.info("  num_layers: " + std::to_string(model_config.num_layers));
-    logger_.info("  vocab_size: " + std::to_string(model_config.vocab_size));
+    int vocab_size = model_config.vocab_size.value_or(10000);
+    logger_.info("  vocab_size: " + std::to_string(vocab_size));
     
     logger_.info("Training parameters:");
     logger_.info("  learning_rate: " + std::to_string(training_config.learning_rate));
@@ -372,21 +416,21 @@ void ComputationExecutor::run_contrastive() {
         model_config.num_heads,
         model_config.num_layers,
         model_config.d_ff,
-        model_config.vocab_size
+        vocab_size
     );
     
     // Load training data
     logger_.info("Loading training data...");
     std::vector<std::vector<int>> sequences;
     if (data_config.input_file.has_value()) {
-        sequences = tokenize_file(data_config.input_file.value(), model_config.vocab_size);
+        sequences = tokenize_file(data_config.input_file.value(), vocab_size);
         logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
     } else {
         logger_.warning("No input file specified, using dummy data");
         for (int i = 0; i < 10; ++i) {
             std::vector<int> seq;
             for (int j = 0; j < 20; ++j) {
-                seq.push_back(rand() % model_config.vocab_size);
+                seq.push_back(rand() % vocab_size);
             }
             sequences.push_back(seq);
         }
@@ -457,7 +501,8 @@ void ComputationExecutor::run_fine_tuning() {
     logger_.info("  d_model: " + std::to_string(model_config.d_model));
     logger_.info("  num_heads: " + std::to_string(model_config.num_heads));
     logger_.info("  num_layers: " + std::to_string(model_config.num_layers));
-    logger_.info("  vocab_size: " + std::to_string(model_config.vocab_size));
+    int vocab_size = model_config.vocab_size.value_or(10000);
+    logger_.info("  vocab_size: " + std::to_string(vocab_size));
     
     int num_classes = 2;
     if (model_config.num_classes.has_value()) {
@@ -489,7 +534,7 @@ void ComputationExecutor::run_fine_tuning() {
         model_config.num_heads,
         model_config.num_layers,
         model_config.d_ff,
-        model_config.vocab_size,
+        vocab_size,
         num_classes
     );
     
@@ -499,7 +544,7 @@ void ComputationExecutor::run_fine_tuning() {
     for (int i = 0; i < 20; ++i) {
         std::vector<int> seq;
         for (int j = 0; j < 15; ++j) {
-            seq.push_back(rand() % model_config.vocab_size);
+            seq.push_back(rand() % vocab_size);
         }
         int label = rand() % num_classes;
         training_samples.push_back({seq, label});
@@ -547,7 +592,8 @@ void ComputationExecutor::run_chain_of_thought() {
     logger_.info("  d_model: " + std::to_string(model_config.d_model));
     logger_.info("  num_heads: " + std::to_string(model_config.num_heads));
     logger_.info("  num_layers: " + std::to_string(model_config.num_layers));
-    logger_.info("  vocab_size: " + std::to_string(model_config.vocab_size));
+    int vocab_size = model_config.vocab_size.value_or(10000);
+    logger_.info("  vocab_size: " + std::to_string(vocab_size));
     
     logger_.info("Training parameters:");
     logger_.info("  learning_rate: " + std::to_string(training_config.learning_rate));
@@ -580,7 +626,8 @@ void ComputationExecutor::run_rlhf() {
     logger_.info("  d_model: " + std::to_string(model_config.d_model));
     logger_.info("  num_heads: " + std::to_string(model_config.num_heads));
     logger_.info("  num_layers: " + std::to_string(model_config.num_layers));
-    logger_.info("  vocab_size: " + std::to_string(model_config.vocab_size));
+    int vocab_size = model_config.vocab_size.value_or(10000);
+    logger_.info("  vocab_size: " + std::to_string(vocab_size));
     
     logger_.info("Training parameters:");
     logger_.info("  learning_rate: " + std::to_string(training_config.learning_rate));
@@ -819,6 +866,84 @@ std::vector<std::vector<int>> ComputationExecutor::load_tokenized_cache(const st
         file.read(reinterpret_cast<char*>(seq.data()), seq_len * sizeof(int));
         sequences.push_back(std::move(seq));
     }
+    
+    return sequences;
+}
+
+// Tokenize file using vocabulary-based tokenizer
+std::vector<std::vector<int>> ComputationExecutor::tokenize_file_with_vocab(const std::string& filename, ::Utils::Tokenizer& tokenizer) {
+    PROFILE_FUNCTION();
+    
+    logger_.info("Tokenizing file with vocabulary tokenizer: " + filename);
+    Utils::Timer tokenize_timer;
+    
+    // Check for cached tokenized data
+    std::string cache_filename = filename + ".vocab_tokenized.bin";
+    if (std::filesystem::exists(cache_filename)) {
+        auto cache_time = std::filesystem::last_write_time(cache_filename);
+        auto file_time = std::filesystem::last_write_time(filename);
+        
+        if (cache_time >= file_time) {
+            logger_.info("Loading from cache: " + cache_filename);
+            auto sequences = load_tokenized_cache(cache_filename);
+            if (!sequences.empty()) {
+                logger_.info("Cache loaded in " + std::to_string(tokenize_timer.elapsed_ms() / 1000.0) + "s");
+                logger_.info("Total sequences: " + std::to_string(sequences.size()));
+                return sequences;
+            }
+        }
+    }
+    
+    // Read file line by line and tokenize
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open file: " + filename);
+    }
+    
+    std::vector<std::vector<int>> sequences;
+    std::string line;
+    size_t total_tokens = 0;
+    size_t max_seq_len = 0;
+    size_t min_seq_len = std::numeric_limits<size_t>::max();
+    size_t lines_processed = 0;
+    
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        
+        // Encode the line using the tokenizer
+        auto tokens = tokenizer.encode(line, false);  // Don't add BOS/EOS for each line
+        
+        if (!tokens.empty()) {
+            total_tokens += tokens.size();
+            max_seq_len = std::max(max_seq_len, tokens.size());
+            min_seq_len = std::min(min_seq_len, tokens.size());
+            sequences.push_back(std::move(tokens));
+        }
+        
+        lines_processed++;
+        if (lines_processed % 10000 == 0) {
+            logger_.info("Processed " + std::to_string(lines_processed) + " lines...");
+        }
+    }
+    file.close();
+    
+    double tokenize_time = tokenize_timer.elapsed_ms();
+    
+    logger_.info("Tokenization complete in " + std::to_string(tokenize_time / 1000.0) + "s");
+    logger_.info("Total sequences: " + std::to_string(sequences.size()));
+    logger_.info("Total tokens: " + std::to_string(total_tokens));
+    if (sequences.size() > 0) {
+        logger_.info("Avg sequence length: " + std::to_string(total_tokens / sequences.size()));
+    }
+    if (min_seq_len != std::numeric_limits<size_t>::max()) {
+        logger_.info("Min sequence length: " + std::to_string(min_seq_len));
+    }
+    logger_.info("Max sequence length: " + std::to_string(max_seq_len));
+    logger_.info("Throughput: " + std::to_string(total_tokens / (tokenize_time / 1000.0)) + " tokens/sec");
+    
+    // Cache tokenized data for future runs
+    save_tokenized_cache(cache_filename, sequences);
+    logger_.info("Cached tokenized data to: " + cache_filename);
     
     return sequences;
 }

@@ -126,7 +126,7 @@ std::unique_ptr<Math::IMatrix> MultiHeadAttention::forward(
         for (int head = 0; head < num_heads_; ++head) {
             size_t start_col = head * d_k_;
             
-            // Extract head slices (in-place view would be better, but this is explicit)
+            // Extract head slices (explicit copy for safety)
             auto Q_head = Math::MatrixFactory::create(seq_len, d_k_);
             auto K_head = Math::MatrixFactory::create(seq_len, d_k_);
             auto V_head = Math::MatrixFactory::create(seq_len, d_k_);

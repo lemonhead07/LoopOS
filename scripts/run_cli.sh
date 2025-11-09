@@ -6,12 +6,12 @@
 set -e  # Exit on error
 
 # Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+RED=$'\x1b[0;31m'
+GREEN=$'\x1b[0;32m'
+YELLOW=$'\x1b[1;33m'
+BLUE=$'\x1b[0;34m'
+CYAN=$'\x1b[0;36m'
+NC=$'\x1b[0m'
 
 # Helper functions
 print_header() {
@@ -43,6 +43,7 @@ ${CYAN}LoopOS CLI - Enhanced Runner${NC}
 
 ${YELLOW}USAGE:${NC}
   Training:         $0 train <config_file.json>
+  Vocab Training:   $0 train-vocab --data <file> [options]
   Generation:       $0 generate [checkpoint.bin] [options]
   Chat:             $0 chat [config_file.json]
   Tokenizer Test:   $0 tokenizer-test [--baseline|--full]
@@ -55,6 +56,10 @@ ${YELLOW}EXAMPLES:${NC}
   ${GREEN}# Training${NC}
   $0 train configs/autoregressive_training.json
   $0 train configs/autoencoder_tokenizer_config.json
+
+  ${GREEN}# Vocab-based Training${NC}
+  $0 train-vocab --data data/pretraining/text/trump_3.6.quarter.txt --epochs 3
+  $0 train-vocab --data data/pretraining/text/trump_3.6.txt --vocab-size 10000 --max-length 128
 
   ${GREEN}# Generation${NC}
   $0 generate
@@ -85,12 +90,32 @@ ${YELLOW}TOKENIZER COMMANDS:${NC}
 EOF
 }
 
+# Find the best available build directory (prioritize optimized builds)
+find_build_dir() {
+    # Check for optimized builds first (AVX-512 > AVX2 > default)
+    if [ -d "build_avx512" ]; then
+        echo "build_avx512"
+    elif [ -d "build_avx2" ]; then
+        echo "build_avx2"
+    elif [ -d "build" ]; then
+        echo "build"
+    else
+        echo ""
+    fi
+}
+
 # Ensure build directory exists
 ensure_build() {
-    if [ ! -d "build" ]; then
-        print_warning "Build directory not found. Building project..."
+    local build_dir=$(find_build_dir)
+    
+    if [ -z "$build_dir" ]; then
+        print_warning "No build directory found. Building project..."
         ./scripts/build.sh
+        build_dir="build"
     fi
+    
+    # Export for use in other functions
+    export BUILD_DIR="$build_dir"
 }
 
 # Build with specific options
@@ -141,9 +166,22 @@ do_training() {
     
     print_header "Training Mode"
     print_info "Config: $config_file"
+    print_info "Using build: $BUILD_DIR"
     echo ""
     
-    ./build/loop_cli --config "$config_file"
+    ./$BUILD_DIR/loop_cli --config "$config_file"
+}
+
+# Vocabulary-based training mode
+do_train_vocab() {
+    ensure_build
+    
+    print_header "Vocabulary-Based Training"
+    print_info "Using build: $BUILD_DIR"
+    echo ""
+    
+    # Pass all arguments directly to train_vocab executable
+    ./$BUILD_DIR/train_vocab "$@"
 }
 
 # Generation mode
@@ -163,9 +201,10 @@ do_generation() {
     
     print_header "Generation Mode"
     print_info "Checkpoint: $checkpoint"
+    print_info "Using build: $BUILD_DIR"
     echo ""
     
-    ./build/loop_cli --generate "$checkpoint" "$@"
+    ./$BUILD_DIR/loop_cli --generate "$checkpoint" "$@"
 }
 
 # Chat mode
@@ -181,12 +220,13 @@ do_chat() {
     
     print_header "Chat Mode"
     print_info "Starting interactive chat..."
+    print_info "Using build: $BUILD_DIR"
     echo ""
     
     if [ -f "$config_file" ]; then
-        ./build/chat_bot --config "$config_file"
+        ./$BUILD_DIR/chat_bot --config "$config_file"
     else
-        ./build/chat_bot
+        ./$BUILD_DIR/chat_bot
     fi
 }
 
@@ -197,30 +237,31 @@ do_tokenizer_test() {
     local test_type="${1:---baseline}"
     
     print_header "Tokenizer Testing"
+    print_info "Using build: $BUILD_DIR"
     
     case "$test_type" in
         --baseline)
             print_info "Running baseline tests (pre-training)..."
             echo ""
             print_info "FSQ Layer Tests:"
-            ./build/test_fsq
+            ./$BUILD_DIR/test_fsq
             echo ""
             print_info "Character Encoder Tests:"
-            ./build/test_encoder
+            ./$BUILD_DIR/test_encoder
             echo ""
             print_info "Vector Decoder Tests:"
-            ./build/test_decoder
+            ./$BUILD_DIR/test_decoder
             echo ""
             print_info "Full Autoencoder Baseline Test:"
-            ./build/test_autoencoder
+            ./$BUILD_DIR/test_autoencoder
             ;;
         --full)
             print_info "Running comprehensive tokenizer test suite..."
             echo ""
-            ./build/test_fsq && \
-            ./build/test_encoder && \
-            ./build/test_decoder && \
-            ./build/test_autoencoder
+            ./$BUILD_DIR/test_fsq && \
+            ./$BUILD_DIR/test_encoder && \
+            ./$BUILD_DIR/test_decoder && \
+            ./$BUILD_DIR/test_autoencoder
             print_success "All tokenizer tests passed!"
             ;;
         *)
@@ -238,19 +279,20 @@ do_component_test() {
     local component="$1"
     
     print_header "Testing: $component"
+    print_info "Using build: $BUILD_DIR"
     
     case "$component" in
         test-fsq)
-            ./build/test_fsq
+            ./$BUILD_DIR/test_fsq
             ;;
         test-encoder)
-            ./build/test_encoder
+            ./$BUILD_DIR/test_encoder
             ;;
         test-decoder)
-            ./build/test_decoder
+            ./$BUILD_DIR/test_decoder
             ;;
         test-autoencoder)
-            ./build/test_autoencoder
+            ./$BUILD_DIR/test_autoencoder
             ;;
         *)
             print_error "Unknown component: $component"
@@ -266,26 +308,27 @@ do_benchmark() {
     local bench_type="${1:---all}"
     
     print_header "Benchmarking"
+    print_info "Using build: $BUILD_DIR"
     
     case "$bench_type" in
         --all)
             print_info "Running all benchmarks..."
             echo ""
             print_info "FSQ Performance:"
-            ./build/test_fsq | grep "Benchmark"
+            ./$BUILD_DIR/test_fsq | grep "Benchmark"
             echo ""
             print_info "Decoder Performance:"
-            ./build/test_decoder | grep "Benchmark"
+            ./$BUILD_DIR/test_decoder | grep "Benchmark"
             ;;
         --tokenizer)
             print_info "Running tokenizer benchmarks..."
-            ./build/test_fsq | grep "Benchmark"
-            ./build/test_decoder | grep "Benchmark"
+            ./$BUILD_DIR/test_fsq | grep "Benchmark"
+            ./$BUILD_DIR/test_decoder | grep "Benchmark"
             ;;
         --model)
             print_info "Running model benchmarks..."
-            if [ -f "./build/model_test" ]; then
-                ./build/model_test
+            if [ -f "./$BUILD_DIR/model_test" ]; then
+                ./$BUILD_DIR/model_test
             else
                 print_warning "Model test not built"
             fi
@@ -334,6 +377,9 @@ main() {
     case "$command" in
         train|training)
             do_training "$@"
+            ;;
+        train-vocab|vocab-train)
+            do_train_vocab "$@"
             ;;
         generate|gen|g)
             do_generation "$@"

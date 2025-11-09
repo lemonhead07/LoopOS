@@ -17,7 +17,7 @@ struct ModelConfig {
     int num_heads;
     int num_layers;
     int d_ff;
-    int vocab_size;
+    std::optional<int> vocab_size;  // Optional - will be auto-calculated from tokenizer if not provided
     std::optional<int> num_classes;  // For classification tasks
     
     static ModelConfig from_json(const json& j);

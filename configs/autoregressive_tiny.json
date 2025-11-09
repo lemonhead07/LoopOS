@@ -9,16 +9,16 @@
   "computation": {
     "mode": "pretraining",
     "method": "autoregressive",
-    "description": "GPT-style autoregressive - quartered Trump dataset (25%)"
+    "description": "GPT-style autoregressive - tiny Trump dataset (100 lines)"
   },
   "training": {
     "learning_rate": 0.0001,
-    "max_length": 128,
-    "batch_size": 32,
-    "num_epochs": 1
+    "batch_size": 8,
+    "num_epochs": 1,
+    "max_length": 128
   },
   "data": {
-    "input_file": "data/pretraining/text/trump_3.6.quarter.txt",
+    "input_file": "data/pretraining/text/trump_tiny.txt",
     "output_dir": "outputs/autoregressive"
   }
 }

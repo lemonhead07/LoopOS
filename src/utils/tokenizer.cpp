@@ -4,6 +4,7 @@
 #include <cctype>
 #include <map>
 #include <iostream>
+#include <chrono>
 
 namespace Utils {
 
@@ -90,17 +91,26 @@ void Tokenizer::build_vocabulary_from_files(const std::vector<std::string>& corp
                                            int vocab_size,
                                            int min_frequency) {
     
-    Logger::instance().info("Tokenizer", "Building vocabulary from " + std::to_string(corpus_files.size()) + " file(s)");    // Count word frequencies
-    std::map<std::string, int> word_freq;
+    Logger::instance().info("Tokenizer", "Building vocabulary from " + std::to_string(corpus_files.size()) + " file(s)");
+    
+    // Count word frequencies with progress reporting
+    std::unordered_map<std::string, int> word_freq;  // Use unordered_map for faster insertions
+    word_freq.reserve(vocab_size * 2);  // Pre-allocate space
+    
+    size_t total_files = corpus_files.size();
+    size_t files_processed = 0;
+    auto last_log_time = std::chrono::steady_clock::now();
     
     for (const auto& corpus_file : corpus_files) {
         std::ifstream file(corpus_file);
         if (!file.is_open()) {
             Logger::instance().error("Tokenizer", "Failed to open corpus file: " + corpus_file);
+            files_processed++;
             continue;
         }
         
         std::string line;
+        size_t lines_in_file = 0;
         while (std::getline(file, line)) {
             auto words = tokenize_text(line);
             for (const auto& word : words) {
@@ -109,8 +119,23 @@ void Tokenizer::build_vocabulary_from_files(const std::vector<std::string>& corp
                     total_tokens_processed_++;
                 }
             }
+            lines_in_file++;
         }
         file.close();
+        files_processed++;
+        
+        // Log progress every 100 files or 5 seconds
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_log_time).count();
+        if (files_processed % 100 == 0 || elapsed >= 5) {
+            float progress = (float)files_processed / total_files * 100.0f;
+            Logger::instance().info("Tokenizer", 
+                "Progress: " + std::to_string(files_processed) + "/" + std::to_string(total_files) + 
+                " files (" + std::to_string((int)progress) + "%) - " +
+                std::to_string(total_tokens_processed_) + " tokens, " +
+                std::to_string(word_freq.size()) + " unique words");
+            last_log_time = now;
+        }
     }
     
     Logger::instance().info("Tokenizer", "Processed " + std::to_string(total_tokens_processed_) + " tokens");

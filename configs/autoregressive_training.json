@@ -4,8 +4,7 @@
     "d_model": 384,
     "num_heads": 8,
     "num_layers": 4,
-    "d_ff": 1536,
-    "vocab_size": 16000
+    "d_ff": 1536
   },
   "computation": {
     "mode": "pretraining",

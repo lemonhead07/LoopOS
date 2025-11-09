@@ -1,0 +1,12 @@
+{
+  "timestamp": "2025-11-09T05:01:21Z",
+  "training_time_seconds": 5,
+  "wiki_directory": "data/pretraining/wiki",
+  "total_files_available": 11578,
+  "files_sampled": 20,
+  "sample_size_mb": 19,
+  "vocab_size": 1000,
+  "min_frequency": 5,
+  "output_vocab": "outputs/test_profiled.vocab",
+  "build_directory": "build_avx512"
+}

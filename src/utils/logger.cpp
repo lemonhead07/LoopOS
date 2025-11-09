@@ -82,12 +82,12 @@ std::string Logger::level_to_string(LogLevel level) {
 
 std::string Logger::get_color_code(LogLevel level) {
     switch (level) {
-        case LogLevel::DEBUG: return "\033[36m";    // Cyan
-        case LogLevel::INFO: return "\033[32m";     // Green
-        case LogLevel::WARNING: return "\033[33m";  // Yellow
-        case LogLevel::ERROR: return "\033[31m";    // Red
-        case LogLevel::CRITICAL: return "\033[1;31m"; // Bold Red
-        default: return "\033[0m";                  // Reset
+        case LogLevel::DEBUG: return "\x1b[36m";    // Cyan
+        case LogLevel::INFO: return "\x1b[32m";     // Green
+        case LogLevel::WARNING: return "\x1b[33m";  // Yellow
+        case LogLevel::ERROR: return "\x1b[31m";    // Red
+        case LogLevel::CRITICAL: return "\x1b[1;31m"; // Bold Red
+        default: return "\x1b[0m";                  // Reset
     }
 }
 
@@ -108,7 +108,7 @@ void Logger::log(LogLevel level, const std::string& module, const std::string& m
               << "[" << std::setw(8) << std::left << level_str << "] "
               << "[" << module << "] "
               << message
-              << "\033[0m"  // Reset color
+              << "\x1b[0m"  // Reset color
               << std::endl;
     
     // File output without colors

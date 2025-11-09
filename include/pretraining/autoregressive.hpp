@@ -31,6 +31,9 @@ public:
     // Train on next-token prediction with metrics return (for epoch training)
     TrainingMetrics train_step_with_metrics(const std::vector<int>& input_ids, float learning_rate);
     
+    // OPTIMIZED: Train on a batch of sequences using batched forward pass
+    std::vector<TrainingMetrics> train_batch_optimized(const std::vector<std::vector<int>>& batch, float learning_rate);
+    
     // Train for multiple epochs with progress bar
     void train_epoch(const std::vector<std::vector<int>>& dataset, float learning_rate, 
                      int num_epochs = 1, bool show_progress = true);

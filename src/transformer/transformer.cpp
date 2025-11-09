@@ -123,7 +123,12 @@ std::unique_ptr<Math::IMatrix> Transformer::embed_tokens(
     size_t seq_len = token_ids.size();
     auto embeddings = Math::MatrixFactory::create(seq_len, d_model_);
     
-    // Lookup token embeddings and add positional embeddings
+    // FUSED: Lookup token embeddings and add positional embeddings in single pass
+    // This avoids creating separate token_emb and pos_emb matrices
+    const float* token_emb_data = token_embedding_->data();
+    const float* pos_emb_data = position_embedding_->data();
+    float* output_data = embeddings->data();
+    
     #pragma omp parallel for
     for (size_t i = 0; i < seq_len; ++i) {
         int token_id = token_ids[i];
@@ -131,10 +136,14 @@ std::unique_ptr<Math::IMatrix> Transformer::embed_tokens(
             token_id = 0;  // Unknown token
         }
         
+        size_t pos_idx = i % max_seq_len_;
+        size_t token_offset = token_id * d_model_;
+        size_t pos_offset = pos_idx * d_model_;
+        size_t out_offset = i * d_model_;
+        
+        #pragma omp simd
         for (int j = 0; j < d_model_; ++j) {
-            float token_emb = token_embedding_->at(token_id, j);
-            float pos_emb = position_embedding_->at(i % max_seq_len_, j);
-            embeddings->at(i, j) = token_emb + pos_emb;
+            output_data[out_offset + j] = token_emb_data[token_offset + j] + pos_emb_data[pos_offset + j];
         }
     }
     

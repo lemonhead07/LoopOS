@@ -99,7 +99,10 @@ public:
     int get_vocab_size() const { return vocab_size_; }
     int get_max_seq_len() const { return max_seq_len_; }
     
-    // Non-const accessors for deserialization
+    // Non-const accessors for deserialization and gradient updates
+    Math::IMatrix* get_token_embedding() { return token_embedding_.get(); }
+    Math::IMatrix* get_position_embedding() { return position_embedding_.get(); }
+    Math::IMatrix* get_output_projection() { return output_projection_.get(); }
     TransformerLayer* get_layer(int idx) { 
         return (idx >= 0 && idx < static_cast<int>(layers_.size())) ? layers_[idx].get() : nullptr;
     }
