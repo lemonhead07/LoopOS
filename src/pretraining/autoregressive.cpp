@@ -431,50 +431,6 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
             continue;
         }
         
-<<<<<<< HEAD
-        // Apply softmax to logits
-        auto& logits = logits_batch[b];
-        
-#ifdef ENABLE_TRAINING_DEBUG
-        // Check logits for NaN/Inf BEFORE softmax
-        bool has_invalid_logits = false;
-        float max_logit = -std::numeric_limits<float>::infinity();
-        float min_logit = std::numeric_limits<float>::infinity();
-        for (size_t i = 0; i < logits->rows(); ++i) {
-            for (size_t j = 0; j < logits->cols(); ++j) {
-                float val = logits->at(i, j);
-                if (std::isnan(val) || std::isinf(val)) {
-                    has_invalid_logits = true;
-                    if (!std::isnan(val)) {  // Track inf separately
-                        max_logit = std::isinf(val) && val > 0 ? val : max_logit;
-                        min_logit = std::isinf(val) && val < 0 ? val : min_logit;
-                    }
-                } else {
-                    max_logit = std::max(max_logit, val);
-                    min_logit = std::min(min_logit, val);
-                }
-            }
-        }
-        
-        if (has_invalid_logits) {
-            Utils::Logger::instance().log(Utils::LogLevel::ERROR, "AUTOREGRESSIVE",
-                "Invalid logits detected in batch " + std::to_string(b) + 
-                " - min=" + std::to_string(min_logit) + ", max=" + std::to_string(max_logit));
-            // Skip this sequence
-            metrics[b].sequence_length = inputs_batch[b].size();
-            metrics[b].loss = 0.0f;
-            metrics[b].forward_time_ms = forward_time_ms / batch_size;
-            continue;
-        }
-#endif
-        
-        auto probs = logits->softmax(1);
-        
-        // Compute cross-entropy loss
-        float seq_loss = 0.0f;
-        const auto& targets = targets_batch[b];
-=======
->>>>>>> 7038d9aadce1fc69aeee97541648ace39ab9a534
         const auto& inputs = inputs_batch[b];
         const auto& targets = targets_batch[b];
         size_t seq_len = inputs.size();
