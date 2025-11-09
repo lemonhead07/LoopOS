@@ -7,6 +7,7 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 - **Hardware Detection**: Automatically detect CPU, GPU, and memory specs
 - **Abstracted Matrix Layer**: Swap backends for optimization (CPU, BLAS, CUDA, etc.)
 - **Transformer Architecture**: Multi-head attention, encoder/decoder layers
+- **Adaptive Learning Rate**: 5 scheduling strategies including Cosine Annealing with Warm Restarts
 - **Pre-training Methods**: 
   - Autoregressive (GPT-style)
   - Masked Language Modeling (BERT-style)
@@ -38,6 +39,9 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 
 # Run interactive chatbot
 ./build/chat_bot
+
+# Demo adaptive learning rate schedulers
+./build/lr_scheduler_demo
 ```
 
 ### Test
@@ -57,6 +61,7 @@ ctest
 
 - **[QUICKSTART.md](QUICKSTART.md)** - Detailed getting started guide
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete architecture documentation for developers and LLMs
+- **[ADAPTIVE_LR_GUIDE.md](ADAPTIVE_LR_GUIDE.md)** - Adaptive learning rate implementation guide
 - **[docs/](docs/)** - Comprehensive documentation library
   - [CLI Examples](docs/CLI_EXAMPLES.md)
   - [Generation Workflow](docs/GENERATION_WORKFLOW.md)
@@ -93,6 +98,7 @@ LoopOS/
 - **`chat_bot`** - Interactive chatbot interface
 - **`build_tokenizer`** - Utility for building vocabularies
 - **`model_test`** - Model testing utility
+- **`lr_scheduler_demo`** - Adaptive learning rate scheduler demonstration
 
 ## Configuration-Based Training
 
