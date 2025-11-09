@@ -12,6 +12,16 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -mtune=native -funroll-loops -ffast-math")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
+# Optional debug logging for training (disabled by default for performance)
+# Usage: cmake -DENABLE_TRAINING_DEBUG=ON ..
+option(ENABLE_TRAINING_DEBUG "Enable detailed debug logging during training" OFF)
+if(ENABLE_TRAINING_DEBUG)
+    add_definitions(-DENABLE_TRAINING_DEBUG)
+    message(STATUS "Training debug logging enabled")
+else()
+    message(STATUS "Training debug logging disabled (use -DENABLE_TRAINING_DEBUG=ON to enable)")
+endif()
+
 # Enable AVX2 with optional AVX-512 for high-performance systems
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
     # AVX2 is always enabled (safe on all modern CPUs from 2013+)
