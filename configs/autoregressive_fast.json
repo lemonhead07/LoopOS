@@ -1,0 +1,46 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 256,
+    "num_heads": 4,
+    "num_layers": 3,
+    "d_ff": 1024,
+    "vocab_size": 16000
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "autoregressive",
+    "description": "Fast GPT-style pretraining - Smaller model for faster iteration (10x speedup)"
+  },
+  "training": {
+    "learning_rate": 0.0001,
+    "max_length": 128,
+    "batch_size": 32,
+    "num_epochs": 3,
+    "random_seed": 42
+  },
+  "data": {
+    "input_file": "data/pretraining/wiki/fullEnglish/",
+    "output_dir": "outputs/wiki_pretrained_fast",
+    "tokenizer_vocab": "outputs/tokenizer_wiki.vocab",
+    "max_files": 0,
+    "file_pattern": "**/*",
+    "shuffle": true,
+    "validation_split": 0.05
+  },
+  "generation": {
+    "max_length": 200,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": 40
+  },
+  "profiling": {
+    "enabled": true,
+    "report_top_n": 20
+  },
+  "checkpointing": {
+    "save_every_n_batches": 500,
+    "keep_last_n": 5,
+    "save_path": "outputs/wiki_pretrained_fast/checkpoints"
+  }
+}

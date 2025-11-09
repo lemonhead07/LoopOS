@@ -981,6 +981,173 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
     data_loader.stop();
 }
 
+void AutoregressiveTrainer::train_epoch_streaming(Utils::StreamingDataLoader& data_loader, 
+                                                  float learning_rate, 
+                                                  int num_epochs, 
+                                                  bool show_progress) {
+    PROFILE_FUNCTION();
+    Utils::ModuleLogger logger("AUTOREGRESSIVE");
+    
+    // Set log level to INFO during training to avoid DEBUG messages interfering with progress bar
+    if (show_progress) {
+        Utils::Logger::instance().set_min_level(Utils::LogLevel::INFO);
+    }
+    
+    for (int epoch = 0; epoch < num_epochs; ++epoch) {
+        logger.info("=== Epoch " + std::to_string(epoch + 1) + "/" + std::to_string(num_epochs) + " ===");
+        logger.info("Using StreamingDataLoader (memory-efficient mode)");
+        
+        // Start epoch with data loader
+        data_loader.start_epoch();
+        
+        float epoch_loss = 0.0f;
+        double epoch_time = 0.0;
+        size_t total_tokens = 0;
+        size_t sequences_processed = 0;
+        
+        // Detailed timing breakdown
+        double total_forward_time = 0.0;
+        double total_loss_time = 0.0;
+        double total_overhead_time = 0.0;
+        
+        Utils::Timer epoch_timer;
+        size_t last_reported_sequences = 0;
+        
+        // Process dataset in batches using streaming data loader
+        while (!data_loader.is_epoch_complete()) {
+            auto batch = data_loader.get_next_batch();
+            
+            if (batch.empty()) {
+                break;  // Epoch complete
+            }
+            
+            size_t actual_batch_size = batch.size();
+            
+            Utils::Timer batch_timer;
+            
+            // Train on batch
+            std::vector<TrainingMetrics> batch_metrics = train_batch_optimized(batch, learning_rate);
+            
+            // Accumulate batch results
+            double batch_forward_time = 0.0;
+            double batch_loss_time = 0.0;
+            double batch_total_time = 0.0;
+            size_t batch_tokens = 0;
+            float batch_loss = 0.0f;
+            
+            for (const auto& metrics : batch_metrics) {
+                epoch_loss += metrics.loss;
+                batch_loss += metrics.loss;
+                batch_total_time += metrics.total_time_ms;
+                batch_tokens += metrics.sequence_length;
+                batch_forward_time += metrics.forward_time_ms;
+                batch_loss_time += metrics.loss_time_ms;
+            }
+            
+            // Track epoch statistics
+            total_tokens += batch_tokens;
+            sequences_processed += actual_batch_size;
+            double actual_batch_time_ms = batch_timer.elapsed_ms();
+            epoch_time += actual_batch_time_ms;
+            total_forward_time += batch_forward_time;
+            total_loss_time += batch_loss_time;
+            total_overhead_time += (actual_batch_time_ms - (batch_total_time / actual_batch_size));
+            
+            // Update progress display more frequently for better feedback
+            size_t lines_processed = data_loader.get_lines_processed();
+            
+            // Update every 100 sequences or when file changes
+            bool should_update = (sequences_processed - last_reported_sequences >= 100) ||
+                                data_loader.is_epoch_complete();
+            
+            if (show_progress && should_update) {
+                last_reported_sequences = sequences_processed;
+                
+                // Calculate metrics
+                float avg_loss = epoch_loss / sequences_processed;
+                double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
+                double elapsed_sec = epoch_timer.elapsed_s();
+                int mins = static_cast<int>(elapsed_sec / 60);
+                int secs = static_cast<int>(elapsed_sec) % 60;
+                
+                // Get current file info
+                size_t current_file = data_loader.get_current_file_index();
+                size_t total_files = data_loader.get_num_files();
+                
+                // Use stderr to avoid mixing with log output
+                std::cerr << "\r\033[K";  // Carriage return + clear line
+                
+                // Calculate file progress percentage
+                float file_progress = total_files > 0 ? (static_cast<float>(current_file) / total_files) * 100.0f : 0.0f;
+                
+                // Build progress bar for files
+                size_t bar_width = 30;
+                size_t filled = static_cast<size_t>(bar_width * file_progress / 100.0f);
+                
+                std::cerr << "[";
+                for (size_t i = 0; i < bar_width; ++i) {
+                    if (i < filled) std::cerr << "█";
+                    else if (i == filled) std::cerr << "▓";
+                    else std::cerr << "░";
+                }
+                std::cerr << "] ";
+                
+                // File progress
+                std::cerr << std::fixed << std::setprecision(1) << file_progress << "% ";
+                std::cerr << "(" << current_file << "/" << total_files << " files)";
+                
+                // Sequence and line counts
+                std::cerr << " | " << sequences_processed << " seq";
+                std::cerr << " | " << lines_processed << " lines";
+                
+                // Metrics: Loss, tokens/sec
+                std::cerr << " | Loss: " << std::fixed << std::setprecision(4) << avg_loss;
+                std::cerr << " | " << std::fixed << std::setprecision(0) << avg_tokens_per_sec << " tok/s";
+                
+                // Time
+                std::cerr << " | " << mins << "m" << secs << "s";
+                
+                std::cerr << std::flush;
+            }
+        }
+        
+        if (show_progress) {
+            std::cerr << std::endl;  // Move to next line after progress
+        }
+        
+        // Print epoch summary with detailed timing breakdown
+        float avg_loss = sequences_processed > 0 ? epoch_loss / sequences_processed : 0.0f;
+        double avg_tokens_per_sec = (total_tokens * 1000.0) / epoch_time;
+        double theoretical_speedup = (total_forward_time + total_loss_time) / epoch_time;
+        
+        std::ostringstream summary;
+        summary << std::fixed << std::setprecision(3);
+        summary << "Epoch " << (epoch + 1) << " completed - "
+                << "Sequences: " << sequences_processed << " | "
+                << "Avg Loss: " << avg_loss << " | "
+                << "Avg tokens/sec: " << avg_tokens_per_sec << " | "
+                << "Parallel speedup: " << theoretical_speedup << "x | "
+                << "Total time: " << (epoch_time / 1000.0) << "s";
+        logger.info(summary.str());
+        
+        // Detailed timing breakdown
+        std::ostringstream breakdown;
+        breakdown << std::fixed << std::setprecision(2);
+        breakdown << "Timing breakdown - "
+                  << "Forward: " << (total_forward_time / 1000.0) << "s (" 
+                  << (total_forward_time / epoch_time * 100.0) << "%), "
+                  << "Loss: " << (total_loss_time / 1000.0) << "s (" 
+                  << (total_loss_time / epoch_time * 100.0) << "%), "
+                  << "Overhead: " << (total_overhead_time / 1000.0) << "s (" 
+                  << (total_overhead_time / epoch_time * 100.0) << "%)";
+        logger.info(breakdown.str());
+        logger.info("");
+    }
+    
+    // Stop data loader to clean up threads
+    data_loader.stop();
+}
+
 void AutoregressiveTrainer::save_checkpoint(const std::string& filepath) const {
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
     logger.info("Saving model checkpoint to: " + filepath);

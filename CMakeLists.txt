@@ -71,6 +71,7 @@ add_library(utils STATIC
     src/utils/cpu_features.cpp
     src/utils/model_loader.cpp
     src/utils/data_loader.cpp
+    src/utils/streaming_data_loader.cpp
     src/utils/lr_scheduler.cpp
 )
 

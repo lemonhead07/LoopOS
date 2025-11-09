@@ -8,6 +8,7 @@
 #include "utils/benchmark.hpp"
 #include "utils/profiler.hpp"
 #include "utils/system_info.hpp"
+#include "utils/streaming_data_loader.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -174,51 +175,93 @@ void ComputationExecutor::run_autoregressive() {
         actual_vocab_size
     );
     
+    // Enable profiling
+    Utils::Profiler::set_enabled(true);
+    
     // Load and tokenize data
     logger_.info("Loading training data...");
-    std::vector<std::vector<int>> sequences;
+    
     if (data_config.input_file.has_value()) {
         std::string input_path = data_config.input_file.value();
         
         // Check if input is a directory or a file
         if (std::filesystem::is_directory(input_path)) {
-            logger_.info("Input is a directory, loading all files recursively...");
-            sequences = tokenize_directory_with_vocab(input_path, tokenizer);
-        } else {
-            sequences = tokenize_file_with_vocab(input_path, tokenizer);
-        }
-        
-        // Chunk long sequences to max_length if specified
-        if (training_config.max_length.has_value()) {
-            int max_len = training_config.max_length.value();
-            std::vector<std::vector<int>> chunked_sequences;
-            size_t total_chunks = 0;
+            logger_.info("Input is a directory, using StreamingDataLoader (memory-efficient)...");
             
-            for (const auto& seq : sequences) {
-                if (seq.size() <= static_cast<size_t>(max_len)) {
-                    chunked_sequences.push_back(seq);
-                } else {
-                    // Split into chunks
-                    for (size_t i = 0; i < seq.size(); i += max_len) {
-                        size_t chunk_size = std::min(static_cast<size_t>(max_len), seq.size() - i);
-                        std::vector<int> chunk(seq.begin() + i, seq.begin() + i + chunk_size);
-                        chunked_sequences.push_back(chunk);
-                        total_chunks++;
+            // Use streaming data loader for directories
+            Utils::StreamingDataLoader::Config loader_config;
+            loader_config.batch_size = training_config.batch_size;
+            loader_config.prefetch_batches = training_config.prefetch_batches.value_or(4);  // Increased from 2
+            loader_config.num_workers = training_config.num_workers.value_or(4);  // Increased from 2 to match CPU cores
+            loader_config.shuffle = training_config.shuffle.value_or(true);
+            loader_config.queue_capacity = 32;  // Increased from 4 to allow more prefetching
+            loader_config.max_sequences_in_memory = 50000;  // Increased from 10K to ~400MB RAM usage
+            loader_config.max_length = training_config.max_length.value_or(256);
+            
+            Utils::StreamingDataLoader streaming_loader(input_path, tokenizer, loader_config);
+            
+            logger_.info("Using StreamingDataLoader with " + 
+                        std::to_string(loader_config.num_workers) + " workers, " +
+                        std::to_string(loader_config.max_sequences_in_memory) + " max sequences in memory");
+            logger_.info("");
+            logger_.info("Starting training...");
+            logger_.info("");
+            
+            // Train with streaming data loader
+            trainer.train_epoch_streaming(streaming_loader, 
+                                        training_config.learning_rate,
+                                        training_config.num_epochs,
+                                        true);
+        } else {
+            // For single files, use traditional approach
+            logger_.info("Input is a file, loading into memory...");
+            std::vector<std::vector<int>> sequences;
+            sequences = tokenize_file_with_vocab(input_path, tokenizer);
+        
+            // Chunk long sequences to max_length if specified
+            if (training_config.max_length.has_value()) {
+                int max_len = training_config.max_length.value();
+                std::vector<std::vector<int>> chunked_sequences;
+                size_t total_chunks = 0;
+                
+                for (const auto& seq : sequences) {
+                    if (seq.size() <= static_cast<size_t>(max_len)) {
+                        chunked_sequences.push_back(seq);
+                    } else {
+                        // Split into chunks
+                        for (size_t i = 0; i < seq.size(); i += max_len) {
+                            size_t chunk_size = std::min(static_cast<size_t>(max_len), seq.size() - i);
+                            std::vector<int> chunk(seq.begin() + i, seq.begin() + i + chunk_size);
+                            chunked_sequences.push_back(chunk);
+                            total_chunks++;
+                        }
                     }
                 }
+                
+                if (total_chunks > 0) {
+                    logger_.info("Chunked " + std::to_string(total_chunks) + " long sequences into max_length=" + std::to_string(max_len));
+                    logger_.info("Total sequences after chunking: " + std::to_string(chunked_sequences.size()));
+                }
+                
+                sequences = chunked_sequences;
             }
             
-            if (total_chunks > 0) {
-                logger_.info("Chunked " + std::to_string(total_chunks) + " long sequences into max_length=" + std::to_string(max_len));
-                logger_.info("Total sequences after chunking: " + std::to_string(chunked_sequences.size()));
-            }
+            logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
+            logger_.info("Starting training...");
+            logger_.info("");
             
-            sequences = chunked_sequences;
+            // Use configured data loader parameters if provided, otherwise use defaults
+            int prefetch_batches = training_config.prefetch_batches.value_or(3);
+            int num_workers = training_config.num_workers.value_or(2);
+            bool shuffle = training_config.shuffle.value_or(true);
+            
+            trainer.train_epoch(sequences, training_config.learning_rate, 
+                            training_config.num_epochs, true,
+                            prefetch_batches, num_workers, shuffle);
         }
-        
-        logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
     } else {
         logger_.warning("No input file specified, using dummy data");
+        std::vector<std::vector<int>> sequences;
         // Create some dummy data
         for (int i = 0; i < 10; ++i) {
             std::vector<int> seq;
@@ -227,23 +270,19 @@ void ComputationExecutor::run_autoregressive() {
             }
             sequences.push_back(seq);
         }
+        
+        logger_.info("Starting training...");
+        logger_.info("");
+        
+        // Use configured data loader parameters if provided, otherwise use defaults
+        int prefetch_batches = training_config.prefetch_batches.value_or(3);
+        int num_workers = training_config.num_workers.value_or(2);
+        bool shuffle = training_config.shuffle.value_or(true);
+        
+        trainer.train_epoch(sequences, training_config.learning_rate, 
+                        training_config.num_epochs, true,
+                        prefetch_batches, num_workers, shuffle);
     }
-    
-    // Training with progress bar
-    logger_.info("Starting training...");
-    logger_.info("");
-    
-    // Enable profiling
-    Utils::Profiler::set_enabled(true);
-    
-    // Use configured data loader parameters if provided, otherwise use defaults
-    int prefetch_batches = training_config.prefetch_batches.value_or(3);
-    int num_workers = training_config.num_workers.value_or(2);
-    bool shuffle = training_config.shuffle.value_or(true);
-    
-    trainer.train_epoch(sequences, training_config.learning_rate, 
-                       training_config.num_epochs, true,
-                       prefetch_batches, num_workers, shuffle);
     
     logger_.info("");
     logger_.info("Training completed!");

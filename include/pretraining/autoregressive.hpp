@@ -2,6 +2,7 @@
 
 #include "../transformer/transformer.hpp"
 #include "../transformer/transformer.hpp"
+#include "../utils/streaming_data_loader.hpp"
 #include <vector>
 #include <string>
 
@@ -42,6 +43,12 @@ public:
     void train_epoch(const std::vector<std::vector<int>>& dataset, float learning_rate, 
                      int num_epochs, bool show_progress,
                      int prefetch_batches, int num_workers, bool shuffle);
+    
+    // Train using streaming data loader (memory-efficient for large datasets)
+    void train_epoch_streaming(Utils::StreamingDataLoader& data_loader, 
+                              float learning_rate, 
+                              int num_epochs = 1, 
+                              bool show_progress = true);
     
     // Generate text autoregressively
     std::vector<int> generate(const std::vector<int>& prompt, int max_length);
