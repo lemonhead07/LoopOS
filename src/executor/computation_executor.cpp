@@ -127,7 +127,10 @@ void ComputationExecutor::run_autoregressive() {
     ::Utils::Tokenizer tokenizer;
     
     std::string vocab_path;
-    if (data_config.output_dir.has_value()) {
+    if (data_config.tokenizer_vocab.has_value()) {
+        // Use specified tokenizer vocabulary file
+        vocab_path = data_config.tokenizer_vocab.value();
+    } else if (data_config.output_dir.has_value()) {
         vocab_path = data_config.output_dir.value() + "/tokenizer.vocab";
     } else {
         vocab_path = "outputs/tokenizer.vocab";
