@@ -105,6 +105,9 @@ std::unique_ptr<Math::IMatrix> MultiHeadAttention::forward(
     const Math::IMatrix& value,
     const Math::IMatrix* mask) {
     
+    (void)key;   // Parameters reserved for future multi-source attention
+    (void)value; // Currently uses fused QKV projection from query only
+    
     size_t seq_len = query.rows();
     
     // 1. Fused QKV projection (1 matmul instead of 3)
@@ -325,6 +328,7 @@ std::vector<std::unique_ptr<Math::IMatrix>> MultiHeadAttention::forward_batched(
 
 // AttentionWorkspace implementation
 AttentionWorkspace::AttentionWorkspace(int batch_size, int seq_len, int d_model, int num_heads) {
+    (void)num_heads; // Reserved for future head-specific optimizations
     // Pre-allocate all buffers
     for (int b = 0; b < batch_size; ++b) {
         Q_batch.push_back(Math::MatrixFactory::create(seq_len, d_model));
