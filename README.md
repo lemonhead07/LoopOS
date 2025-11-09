@@ -17,6 +17,7 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
   - Reinforcement Learning from Human Feedback (RLHF)
 - **JSON-based CLI**: Select and configure computations via JSON configuration files
 - **Real-time Logging**: Color-coded console output with daily log rotation
+- **Performance Optimized**: AVX2/AVX-512 SIMD, OpenMP parallelization
 
 ## Quick Start
 
@@ -26,42 +27,18 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 ./scripts/build.sh
 ```
 
-### Run
+### Run Examples
 
 ```bash
 # Run main demo (hardware detection + matrix operations)
-./scripts/run.sh
+./build/loop_os
 
-# Run hardware detection module only
-./scripts/run_hardware_demo.sh
+# Run CLI with a training configuration
+./build/loop_cli -c configs/autoregressive_training.json
 
-# Run matrix operations demo
-./scripts/run_matrix_demo.sh
+# Run interactive chatbot
+./build/chat_bot
 ```
-
-### CLI Usage
-
-The CLI allows you to select and run different model computations using JSON configuration files:
-
-```bash
-# List all available configurations
-./build/loop_cli --list-configs
-
-# Validate a configuration file
-./build/loop_cli --validate configs/autoregressive_training.json
-
-# Run a specific computation
-./build/loop_cli --config configs/autoregressive_training.json
-
-# Shorthand
-./build/loop_cli -c configs/masked_lm_training.json
-```
-
-Available configurations:
-- **Pre-training**: `autoregressive_training.json`, `masked_lm_training.json`, `contrastive_training.json`
-- **Post-training**: `fine_tuning.json`, `chain_of_thought.json`, `rlhf_training.json`
-
-See `configs/README.md` for detailed documentation on JSON configuration format.
 
 ### Test
 
@@ -70,12 +47,22 @@ cd build
 ctest
 ```
 
-
 ### Clean
 
 ```bash
 ./scripts/clean.sh
 ```
+
+## Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** - Detailed getting started guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete architecture documentation for developers and LLMs
+- **[docs/](docs/)** - Comprehensive documentation library
+  - [CLI Examples](docs/CLI_EXAMPLES.md)
+  - [Generation Workflow](docs/GENERATION_WORKFLOW.md)
+  - [Chatbot Guide](docs/CHATBOT_QUICKSTART.md)
+  - [Performance Optimization](docs/OPTIMIZATIONS.md)
+  - [And more...](docs/README.md)
 
 ## Project Structure
 
@@ -89,59 +76,69 @@ LoopOS/
 │   ├── posttraining/     # Post-training methods
 │   ├── config/           # Configuration management
 │   ├── executor/         # Computation executor
-│   ├── external/         # External libraries (JSON parser)
+│   ├── chat/             # Chatbot interface
 │   └── utils/            # Logging and utilities
 ├── src/                  # Implementation files
-├── examples/             # Demo applications
-├── tests/                # Unit tests
-├── scripts/              # Build and run scripts
 ├── configs/              # JSON configuration files
-├── data/pretraining/     # Put your training data here
+├── data/                 # Training data
+├── docs/                 # Documentation
+├── scripts/              # Build and run scripts
 └── logs/                 # Daily rotating logs
-
 ```
 
-## Logging
+## Available Executables
 
-All modules use a unified logging system with:
-- Real-time color-coded console output
-- Daily log rotation (logs/loop_os_YYYY-MM-DD.log)
-- Thread-safe logging
-- Module-based log categorization
+- **`loop_os`** - Main demo (hardware detection + matrix operations)
+- **`loop_cli`** - CLI for running training configurations
+- **`chat_bot`** - Interactive chatbot interface
+- **`build_tokenizer`** - Utility for building vocabularies
+- **`model_test`** - Model testing utility
 
-Log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+## Configuration-Based Training
 
-## Data Directory
+Run different training methods using JSON configuration files:
 
-Place your pre-training data in `data/pretraining/`. See `data/pretraining/README.md` for format details.
+```bash
+# List all available configurations
+./build/loop_cli --list-configs
+
+# Validate a configuration file
+./build/loop_cli --validate configs/autoregressive_training.json
+
+# Run a specific computation
+./build/loop_cli -c configs/autoregressive_training.json
+```
+
+Available configurations in `configs/`:
+- **Pre-training**: `autoregressive_training.json`, `masked_lm_training.json`, `contrastive_training.json`
+- **Post-training**: `fine_tuning.json`, `chain_of_thought.json`, `rlhf_training.json`
 
 ## Matrix Backend
 
-The abstracted matrix layer allows for future optimizations:
+The abstracted matrix layer supports multiple backends:
 
 ```cpp
-// Set backend based on detected hardware
-Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_NAIVE);
+// Set backend based on hardware capabilities
+Math::MatrixFactory::set_backend(Math::MatrixFactory::Backend::CPU_OPTIMIZED);
 
-// Create matrices using factory
+// Create and use matrices
 auto mat = Math::MatrixFactory::random_normal(512, 512);
-
-// Perform operations
-auto result = mat->matmul(*other);
-auto activated = result->relu();
+auto result = mat->matmul(*other)->relu();
 ```
 
 Available backends:
-- `CPU_NAIVE` - Simple C++ implementation (current)
-- `CPU_OPTIMIZED` - AVX/SSE optimized (planned)
+- `CPU_NAIVE` - Simple C++ implementation
+- `CPU_OPTIMIZED` - AVX2/AVX-512 SIMD optimized (recommended)
 - `CUDA` - GPU acceleration (planned)
 - `BLAS` - BLAS/LAPACK (planned)
 
 ## Requirements
 
 - CMake 3.14+
-- C++17 compatible compiler
+- C++17 compatible compiler (GCC 7+, Clang 5+)
+- OpenMP support
 - Linux (for hardware detection features)
+- Optional: CPU with AVX2 (2013+) or AVX-512 support
 
 ## License
 
