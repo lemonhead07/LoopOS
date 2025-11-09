@@ -531,15 +531,19 @@ std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
     auto result = std::make_unique<CPUMatrix>(rows_, cols_);
     
     if (dim == -1 || dim == 1) {
-        // Softmax across columns (each row independently)
-        #pragma omp parallel for
+        // Softmax across columns (each row independently) - parallelized
+        #pragma omp parallel for schedule(static)
         for (size_t i = 0; i < rows_; ++i) {
+            // Find max value for numerical stability
             float max_val = at(i, 0);
+            #pragma omp simd reduction(max:max_val)
             for (size_t j = 1; j < cols_; ++j) {
                 max_val = std::max(max_val, at(i, j));
             }
             
+            // Compute exp and sum
             float sum_exp = 0.0f;
+            #pragma omp simd reduction(+:sum_exp)
             for (size_t j = 0; j < cols_; ++j) {
                 float exp_val = std::exp(at(i, j) - max_val);
                 result->at(i, j) = exp_val;
@@ -548,20 +552,25 @@ std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
             
             // Add epsilon to prevent division by zero
             sum_exp = std::max(sum_exp, 1e-20f);
+            float inv_sum = 1.0f / sum_exp;
             
+            // Normalize
+            #pragma omp simd
             for (size_t j = 0; j < cols_; ++j) {
-                result->at(i, j) /= sum_exp;
+                result->at(i, j) *= inv_sum;
             }
         }
     } else if (dim == 0) {
-        // Softmax across rows (each column independently)
-        #pragma omp parallel for
+        // Softmax across rows (each column independently) - parallelized
+        #pragma omp parallel for schedule(static)
         for (size_t j = 0; j < cols_; ++j) {
+            // Find max value
             float max_val = at(0, j);
             for (size_t i = 1; i < rows_; ++i) {
                 max_val = std::max(max_val, at(i, j));
             }
             
+            // Compute exp and sum
             float sum_exp = 0.0f;
             for (size_t i = 0; i < rows_; ++i) {
                 float exp_val = std::exp(at(i, j) - max_val);
@@ -571,9 +580,11 @@ std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
             
             // Add epsilon to prevent division by zero
             sum_exp = std::max(sum_exp, 1e-20f);
+            float inv_sum = 1.0f / sum_exp;
             
+            // Normalize
             for (size_t i = 0; i < rows_; ++i) {
-                result->at(i, j) /= sum_exp;
+                result->at(i, j) *= inv_sum;
             }
         }
     }
