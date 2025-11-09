@@ -405,6 +405,19 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
         return metrics;
     }
     
+    // Storage for gradients - initialize to zero
+    auto d_token_emb = Math::MatrixFactory::create(
+        model_->get_token_embedding()->rows(),
+        model_->get_token_embedding()->cols()
+    );
+    d_token_emb->zero();
+    
+    auto d_output_proj = Math::MatrixFactory::create(
+        model_->get_output_projection()->rows(),
+        model_->get_output_projection()->cols()
+    );
+    d_output_proj->zero();
+    
     // Process each sequence in batch
     for (size_t b = 0; b < batch_size; ++b) {
         if (inputs_batch[b].empty() || targets_batch[b].empty()) {
@@ -416,7 +429,8 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
         }
         
         // Apply softmax to logits
-        auto probs = logits_batch[b]->softmax(1);
+        auto& logits = logits_batch[b];
+        auto probs = logits->softmax(1);
         
         // Compute cross-entropy loss
         float seq_loss = 0.0f;
@@ -426,10 +440,8 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
         for (size_t i = 0; i < targets.size(); ++i) {
             int target_token = targets[i];
             if (target_token >= 0 && target_token < vocab_size_) {
-                float target_prob = probs->at(i, target_token);
-                target_prob = std::max(target_prob, 1e-10f);  // Prevent log(0)
-                float token_loss = -std::log(target_prob);
-                seq_loss += token_loss;
+                float target_prob = std::max(probs->at(i, target_token), 1e-10f);
+                seq_loss += -std::log(target_prob);
             }
         }
         
@@ -444,53 +456,187 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
         metrics[b].loss = avg_seq_loss;
         metrics[b].forward_time_ms = forward_time_ms / batch_size;
         
-        // BACKWARD PASS: TEMPORARILY DISABLED
-        // Computing gradients might be interfering with loss calculation
-        /*
+        // BACKWARD PASS: Compute gradients
+        // gradient = probs - one_hot(targets), scaled by 1/seq_len
         auto grad_logits = Math::Autograd::softmax_cross_entropy_backward(
             *probs, targets, vocab_size_
         );
-        */
         
-        // In a full implementation, we would:
-        // 1. Backprop grad_logits through output projection to get grad_hidden
-        // 2. Backprop grad_hidden through transformer layers
-        // 3. Backprop through embeddings
-        // 4. Accumulate all gradients
-        // 5. Apply optimizer step (SGD/Adam)
+        // To compute gradients for output projection, we need the hidden states
+        // Re-run forward pass up to final norm to get hidden states
+        // (This is inefficient but avoids major refactoring)
+        size_t seq_len = inputs.size();
+        auto x = Math::MatrixFactory::create(seq_len, d_model_);
         
-        // For now, we'll apply a simple gradient-based update to demonstrate learning
-    }
-    
-    // Apply simple weight updates (gradient-based learning)
-    // TEMPORARILY DISABLED to debug NaN issue
-    // TODO: Implement proper gradient descent
-    /*
-    if (valid_sequences > 0 && learning_rate > 0.0f) {
-        float effective_lr = learning_rate * 0.1f;
-        auto* output_proj = model_->get_output_projection();
-        auto* token_emb = model_->get_token_embedding();
+        // Embed tokens
+        const float* token_emb_data = model_->get_token_embedding()->data();
+        const float* pos_emb_data = model_->get_position_embedding()->data();
+        float* x_data = x->data();
         
-        float avg_loss = total_batch_loss / static_cast<float>(valid_sequences);
-        float update_scale = effective_lr * std::min(1.0f, avg_loss);
-        
-        float* output_data = output_proj->data();
-        size_t output_size = output_proj->size();
-        
-        #pragma omp parallel for simd
-        for (size_t i = 0; i < output_size; ++i) {
-            output_data[i] *= (1.0f - effective_lr * 0.0001f);
+        for (size_t i = 0; i < seq_len; ++i) {
+            int token_id = inputs[i];
+            if (token_id >= 0 && token_id < vocab_size_) {
+                size_t pos_idx = i % static_cast<size_t>(model_->get_max_seq_len());
+                size_t token_offset = token_id * d_model_;
+                size_t pos_offset = pos_idx * d_model_;
+                size_t out_offset = i * d_model_;
+                
+                for (int j = 0; j < d_model_; ++j) {
+                    x_data[out_offset + j] = token_emb_data[token_offset + j] + pos_emb_data[pos_offset + j];
+                }
+            }
         }
         
-        float* emb_data = token_emb->data();
-        size_t emb_size = token_emb->size();
+        // Pass through layers (without caching - just to get final hidden state)
+        auto mask = model_->create_causal_mask(seq_len);
+        for (int layer_idx = 0; layer_idx < num_layers_; ++layer_idx) {
+            auto* layer = model_->get_layer(layer_idx);
+            x = layer->forward(*x, mask.get());
+        }
+        
+        // Final layer norm to get hidden states
+        auto hidden = model_->get_final_norm()->forward(*x);
+        
+        // Now compute gradients for output projection
+        // logits = hidden @ W_out
+        // grad_W_out = hidden^T @ grad_logits
+        auto hidden_T = hidden->transpose();
+        auto grad_W_out = hidden_T->matmul(*grad_logits);
+        
+        // Accumulate gradient for output projection
+        const float* grad_W_data = grad_W_out->data();
+        float* d_W_data = d_output_proj->data();
+        size_t W_size = d_output_proj->size();
+        
+        for (size_t i = 0; i < W_size; ++i) {
+            d_W_data[i] += grad_W_data[i];
+        }
+        
+        // Backprop through output projection to get gradient for hidden states
+        // grad_hidden = grad_logits @ W_out^T
+        auto W_out_T = model_->get_output_projection()->transpose();
+        auto grad_hidden = grad_logits->matmul(*W_out_T);
+        
+        // Accumulate embedding gradients
+        // This backprops through the embedding lookup
+        Math::Autograd::embedding_backward(inputs, *grad_hidden, *d_token_emb);
+    }
+    
+    // Apply gradient updates with clipping
+    if (valid_sequences > 0 && learning_rate > 0.0f) {
+        // Gradient clipping to prevent exploding gradients
+        const float clip_value = 5.0f;
+        
+        // Average gradients over batch
+        float batch_scale = 1.0f / static_cast<float>(valid_sequences);
+        
+        // 1. Update token embeddings
+        float* d_emb_data = d_token_emb->data();
+        float* emb_data = model_->get_token_embedding()->data();
+        size_t emb_size = d_token_emb->size();
         
         #pragma omp parallel for simd
         for (size_t i = 0; i < emb_size; ++i) {
-            emb_data[i] *= (1.0f - effective_lr * 0.0001f);
+            // Scale by batch size
+            float grad = d_emb_data[i] * batch_scale;
+            
+            // Clip gradient
+            grad = std::max(-clip_value, std::min(clip_value, grad));
+            
+            // Apply SGD update: param -= learning_rate * gradient
+            emb_data[i] -= learning_rate * grad;
+        }
+        
+        // 2. Update output projection
+        float* d_out_data = d_output_proj->data();
+        float* out_data = model_->get_output_projection()->data();
+        size_t out_size = d_output_proj->size();
+        
+        #pragma omp parallel for simd
+        for (size_t i = 0; i < out_size; ++i) {
+            // Scale by batch size
+            float grad = d_out_data[i] * batch_scale;
+            
+            // Clip gradient
+            grad = std::max(-clip_value, std::min(clip_value, grad));
+            
+            // Apply SGD update
+            out_data[i] -= learning_rate * grad;
+        }
+        
+        // 3. Apply weight decay (L2 regularization) to all model parameters
+        // This helps prevent weights from growing too large
+        float weight_decay = 0.01f;
+        float decay_factor = 1.0f - (learning_rate * weight_decay);
+        
+        // Regularize embeddings
+        #pragma omp parallel for simd
+        for (size_t i = 0; i < emb_size; ++i) {
+            emb_data[i] *= decay_factor;
+        }
+        
+        // Regularize output projection
+        #pragma omp parallel for simd
+        for (size_t i = 0; i < out_size; ++i) {
+            out_data[i] *= decay_factor;
+        }
+        
+        // Regularize all transformer layers
+        for (int layer_idx = 0; layer_idx < num_layers_; ++layer_idx) {
+            auto* layer = model_->get_layer(layer_idx);
+            if (!layer) continue;
+            
+            // Regularize attention weights
+            auto* attention = layer->get_attention();
+            if (attention) {
+                auto* W_qkv = const_cast<Math::IMatrix*>(attention->get_W_qkv());
+                auto* W_o = const_cast<Math::IMatrix*>(attention->get_W_o());
+                
+                if (W_qkv) {
+                    float* qkv_data = W_qkv->data();
+                    size_t qkv_size = W_qkv->size();
+                    #pragma omp parallel for simd
+                    for (size_t i = 0; i < qkv_size; ++i) {
+                        qkv_data[i] *= decay_factor;
+                    }
+                }
+                
+                if (W_o) {
+                    float* o_data = W_o->data();
+                    size_t o_size = W_o->size();
+                    #pragma omp parallel for simd
+                    for (size_t i = 0; i < o_size; ++i) {
+                        o_data[i] *= decay_factor;
+                    }
+                }
+            }
+            
+            // Regularize feedforward weights
+            auto* feedforward = layer->get_feedforward();
+            if (feedforward) {
+                auto* W1 = const_cast<Math::IMatrix*>(feedforward->get_W1());
+                auto* W2 = const_cast<Math::IMatrix*>(feedforward->get_W2());
+                
+                if (W1) {
+                    float* w1_data = W1->data();
+                    size_t w1_size = W1->size();
+                    #pragma omp parallel for simd
+                    for (size_t i = 0; i < w1_size; ++i) {
+                        w1_data[i] *= decay_factor;
+                    }
+                }
+                
+                if (W2) {
+                    float* w2_data = W2->data();
+                    size_t w2_size = W2->size();
+                    #pragma omp parallel for simd
+                    for (size_t i = 0; i < w2_size; ++i) {
+                        w2_data[i] *= decay_factor;
+                    }
+                }
+            }
         }
     }
-    */
     
     double loss_time_ms = timer.elapsed_ms();
     double total_time_ms = total_timer.elapsed_ms();
