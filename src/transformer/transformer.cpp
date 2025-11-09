@@ -39,6 +39,7 @@ void TransformerLayer::fused_residual_norm(
 std::unique_ptr<Math::IMatrix> TransformerLayer::forward(
     const Math::IMatrix& x,
     const Math::IMatrix* mask) {
+    PROFILE_FUNCTION();
     
     size_t seq_len = x.rows();
     
@@ -116,6 +117,7 @@ void Transformer::initialize_embeddings() {
 
 std::unique_ptr<Math::IMatrix> Transformer::embed_tokens(
     const std::vector<int>& token_ids) {
+    PROFILE_FUNCTION();
     
     size_t seq_len = token_ids.size();
     auto embeddings = Math::MatrixFactory::create(seq_len, d_model_);
@@ -173,6 +175,7 @@ std::unique_ptr<Math::IMatrix> Transformer::create_causal_mask(int seq_len) {
 
 std::unique_ptr<Math::IMatrix> Transformer::forward(
     const std::vector<int>& token_ids) {
+    PROFILE_FUNCTION();
     
     size_t seq_len = token_ids.size();
     

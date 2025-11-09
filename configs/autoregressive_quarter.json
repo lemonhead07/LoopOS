@@ -10,16 +10,16 @@
   "computation": {
     "mode": "pretraining",
     "method": "autoregressive",
-    "description": "GPT-style autoregressive language modeling (small/fast test)"
+    "description": "GPT-style autoregressive - quartered Trump dataset (25%)"
   },
   "training": {
     "learning_rate": 0.0001,
     "max_length": 128,
     "batch_size": 32,
-    "num_epochs": 1
+    "num_epochs": 3
   },
   "data": {
-    "input_file": "data/pretraining/text/trump_3.6.txt",
+    "input_file": "data/pretraining/text/trump_3.6.quarter.txt",
     "output_dir": "outputs/autoregressive"
   }
 }

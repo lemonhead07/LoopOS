@@ -9,7 +9,7 @@ find_package(OpenMP REQUIRED)
 
 # Compiler flags for maximum optimization
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -mtune=native -funroll-loops -ffast-math")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -mtune=native -funroll-loops -ffast-math")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
 
 # Enable AVX2 with optional AVX-512 for high-performance systems
@@ -57,6 +57,7 @@ add_library(utils STATIC
     src/utils/sampling.cpp
     src/utils/serialization.cpp
     src/utils/profiler.cpp
+    src/utils/system_info.cpp
     src/utils/cpu_features.cpp
     src/utils/model_loader.cpp
     src/utils/data_loader.cpp
@@ -65,7 +66,6 @@ add_library(utils STATIC
 # Math Library (Abstracted Matrix Backend)
 add_library(math_backend STATIC
     src/math/cpu_matrix.cpp
-    src/utils/thread_pool.cpp
     src/utils/memory_manager.cpp
     src/utils/benchmark.cpp
 )

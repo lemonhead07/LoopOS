@@ -15,6 +15,8 @@ LayerNorm::LayerNorm(int normalized_shape, float eps)
 }
 
 MatrixPtr LayerNorm::forward(const Matrix& x) {
+    PROFILE_FUNCTION();
+    
     // Layer normalization: (x - mean) / sqrt(variance + eps) * gamma + beta
     
     size_t rows = x.rows();

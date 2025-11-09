@@ -1,6 +1,5 @@
 #include "math/cpu_matrix.hpp"
 #include "utils/profiler.hpp"
-#include "utils/thread_pool.hpp"
 #include "utils/logger.hpp"
 #include <cmath>
 #include <algorithm>
@@ -340,6 +339,8 @@ void CPUMatrix::matmul_blocked(const CPUMatrix& A,
 }
 
 std::unique_ptr<IMatrix> CPUMatrix::matmul(const IMatrix& other) const {
+    PROFILE_FUNCTION();
+    
     if (cols_ != other.rows()) {
         throw std::invalid_argument("Matrix dimensions incompatible for multiplication");
     }
@@ -525,6 +526,8 @@ std::unique_ptr<IMatrix> CPUMatrix::tanh() const {
 }
 
 std::unique_ptr<IMatrix> CPUMatrix::softmax(int dim) const {
+    PROFILE_FUNCTION();
+    
     auto result = std::make_unique<CPUMatrix>(rows_, cols_);
     
     if (dim == -1 || dim == 1) {

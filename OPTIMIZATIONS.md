@@ -46,12 +46,10 @@ This document describes the comprehensive multithreading and SIMD optimizations 
 
 ```
 include/utils/
-├── thread_pool.hpp          # Work-stealing thread pool
 ├── memory_manager.hpp       # Adaptive memory allocation
 └── benchmark.hpp            # Performance benchmarking
 
 src/utils/
-├── thread_pool.cpp
 ├── memory_manager.cpp
 └── benchmark.cpp
 
@@ -99,30 +97,34 @@ make -j8
 
 ## 🧵 Multithreading Architecture
 
-### 1. Work-Stealing Thread Pool
+### OpenMP Parallelization
 
-**Location:** `include/utils/thread_pool.hpp`
+**Location:** Throughout transformer and matrix code
 
 ```cpp
-// Initialize with hardware thread count
-auto& pool = ThreadPool::get_instance();  // 8 threads on your system
-
-// Submit tasks
-auto future = pool.submit([]() { /* work */ });
-
-// Parallel for loops
-pool.parallel_for(0, 1000, [](size_t i) {
+// Parallel for loops with OpenMP
+#pragma omp parallel for
+for (size_t i = 0; i < n; ++i) {
     // Process element i
-});
+}
+
+// Parallel with collapse for nested loops
+#pragma omp parallel for collapse(2)
+for (size_t i = 0; i < rows; ++i) {
+    for (size_t j = 0; j < cols; ++j) {
+        // Process element (i, j)
+    }
+}
 ```
 
 **Features:**
-- Automatic hardware detection
-- Work stealing prevents idle threads
-- Load balancing across cores
-- NUMA-aware (future)
+- Automatic hardware thread detection
+- Low overhead for data-parallel workloads
+- Dynamic scheduling for load balancing
+- Compiler-integrated optimizations
+- Works seamlessly with SIMD vectorization
 
-### 2. SIMD-Optimized Matrix Operations
+### SIMD-Optimized Matrix Operations
 
 **Location:** `src/math/optimized_cpu_matrix.cpp`
 
@@ -164,28 +166,11 @@ for (size_t i = 0; i < n; i += 8) {
 
 **Throughput:** 3+ GB/s (limited by memory bandwidth)
 
-### 3. Parallel Multi-Head Attention
+### Parallel Multi-Head Attention
 
 **Location:** `src/transformer/attention.cpp`
 
-```cpp
-// Process each attention head in parallel
-std::vector<std::future<MatrixPtr>> head_futures;
-
-for (int head = 0; head < num_heads_; ++head) {
-    head_futures.push_back(thread_pool.submit([&, head]() {
-        // Extract Q, K, V for this head
-        // Compute attention independently
-        return scaled_dot_product_attention(...);
-    }));
-}
-
-// Concatenate results
-for (int head = 0; head < num_heads_; ++head) {
-    auto head_output = head_futures[head].get();
-    // Merge into output
-}
-```
+The multi-head attention mechanism uses OpenMP to parallelize computation across attention heads, allowing independent processing of each head's query, key, and value projections.
 
 **Speedup:** Near-linear with number of heads (8 heads = ~7x faster)
 
@@ -268,8 +253,7 @@ if (cpu_info.has_feature("AVX2")) {
     MatrixFactory::set_backend(Backend::CPU_NAIVE);
 }
 
-// Thread count from hardware
-auto& pool = ThreadPool::get_instance();  // Auto-detects 8 threads
+// OpenMP automatically uses all available hardware threads
 ```
 
 ## 🔬 Technical Deep Dive

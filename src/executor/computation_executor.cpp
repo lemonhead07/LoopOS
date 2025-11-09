@@ -6,6 +6,8 @@
 #include "posttraining/chain_of_thought.hpp"
 #include "posttraining/reinforcement.hpp"
 #include "utils/benchmark.hpp"
+#include "utils/profiler.hpp"
+#include "utils/system_info.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -24,12 +26,19 @@ ComputationExecutor::ComputationExecutor(const Config::Configuration& config)
 }
 
 void ComputationExecutor::execute() {
+    // Log system information at startup
+    Utils::SystemInfo::log_system_info();
+    logger_.info("");
+    
     logger_.info("=== Starting Computation Execution ===");
     
     const auto& comp_config = config_.get_computation_config();
     logger_.info("Mode: " + comp_config.mode);
     logger_.info("Method: " + comp_config.method);
     logger_.info("");
+    
+    // Enable profiling for performance analysis
+    Utils::Profiler::set_enabled(true);
     
     status_ = "running";
     
@@ -171,6 +180,9 @@ void ComputationExecutor::run_autoregressive() {
     logger_.info("Starting training...");
     logger_.info("");
     
+    // Enable profiling
+    Utils::Profiler::set_enabled(true);
+    
     // Use configured data loader parameters if provided, otherwise use defaults
     int prefetch_batches = training_config.prefetch_batches.value_or(3);
     int num_workers = training_config.num_workers.value_or(2);
@@ -182,6 +194,18 @@ void ComputationExecutor::run_autoregressive() {
     
     logger_.info("");
     logger_.info("Training completed!");
+    
+    // Save the trained model checkpoint
+    if (data_config.output_dir.has_value()) {
+        std::string checkpoint_path = data_config.output_dir.value() + "/model_checkpoint.bin";
+        logger_.info("Saving model checkpoint to: " + checkpoint_path);
+        trainer.save_checkpoint(checkpoint_path);
+        logger_.info("Model saved successfully!");
+    }
+    
+    // Print profiling report
+    logger_.info("");
+    Utils::Profiler::print_report(15);
     
     // Generate sample output
     logger_.info("Generating sample text...");
@@ -588,6 +612,8 @@ void ComputationExecutor::run_rlhf() {
 // Helper function to tokenize text into simple word-based tokens
 // OPTIMIZED: Uses memory-mapped I/O, parallel processing, and caching
 std::vector<std::vector<int>> ComputationExecutor::tokenize_file(const std::string& filename, int vocab_size) {
+    PROFILE_FUNCTION();
+    
     logger_.info("Tokenizing file: " + filename);
     Utils::Timer tokenize_timer;
     

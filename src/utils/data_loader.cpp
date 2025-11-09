@@ -1,5 +1,6 @@
 #include "utils/data_loader.hpp"
 #include "utils/logger.hpp"
+#include "utils/profiler.hpp"
 #include <algorithm>
 #include <random>
 #include <chrono>
@@ -38,6 +39,8 @@ DataLoader::~DataLoader() {
 }
 
 void DataLoader::start_epoch() {
+    PROFILE_FUNCTION();
+    
     ModuleLogger logger("DATALOADER");
     
     // Shuffle indices if enabled
@@ -94,6 +97,8 @@ void DataLoader::start_epoch() {
 }
 
 DataLoader::BatchType DataLoader::get_next_batch() {
+    PROFILE_FUNCTION();
+    
     BatchType batch;
     
     // Wait for batch to be ready
@@ -208,6 +213,8 @@ void DataLoader::worker_thread() {
 }
 
 void DataLoader::prepare_batch(size_t start_idx) {
+    PROFILE_FUNCTION();
+    
     BatchType batch;
     
     // Determine batch size (might be smaller for last batch)

@@ -57,6 +57,7 @@ void MultiHeadAttention::scaled_dot_product_attention_optimized(
     const Math::IMatrix& V,
     Math::IMatrix& output,
     const Math::IMatrix* mask) {
+    PROFILE_FUNCTION();
     
     size_t seq_len = Q.rows();
     float scale = 1.0f / std::sqrt(static_cast<float>(d_k_));

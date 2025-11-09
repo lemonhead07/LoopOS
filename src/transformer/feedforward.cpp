@@ -74,6 +74,8 @@ void FeedForward::fused_linear_gelu(
 }
 
 std::unique_ptr<Math::IMatrix> FeedForward::forward(const Math::IMatrix& input) {
+    PROFILE_FUNCTION();
+    
     size_t seq_len = input.rows();
     
     // 1. First layer with GELU (fused operation)

@@ -1,11 +1,14 @@
 #include "config/configuration.hpp"
 #include "executor/computation_executor.hpp"
+#include "pretraining/autoregressive.hpp"
 #include "utils/logger.hpp"
+#include "utils/tokenizer.hpp"
 #include <iostream>
 #include <string>
 #include <vector>
 #include <filesystem>
 #include <algorithm>
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -15,17 +18,25 @@ void print_usage(const std::string& program_name) {
     std::cout << "Usage:\n";
     std::cout << "  " << program_name << " --config <config_file.json>\n";
     std::cout << "  " << program_name << " -c <config_file.json>\n";
+    std::cout << "  " << program_name << " --generate <checkpoint.bin> [options]\n";
     std::cout << "  " << program_name << " --list-configs\n";
     std::cout << "  " << program_name << " --validate <config_file.json>\n";
     std::cout << "  " << program_name << " --help\n\n";
     std::cout << "Options:\n";
     std::cout << "  --config, -c <file>    Load and execute configuration from JSON file\n";
+    std::cout << "  --generate <ckpt>      Load checkpoint and generate text\n";
+    std::cout << "    --length <n>         Number of tokens to generate (default: 50)\n";
+    std::cout << "    --prompt <ids>       Comma-separated token IDs (default: 1,2,3)\n";
+    std::cout << "    --tokenizer <file>   Path to tokenizer vocab (default: outputs/tokenizer.vocab)\n";
+    std::cout << "    --no-decode          Show token IDs only, don't decode to text\n";
     std::cout << "  --list-configs         List all available configuration files\n";
     std::cout << "  --validate <file>      Validate configuration file without executing\n";
     std::cout << "  --help, -h             Show this help message\n\n";
     std::cout << "Examples:\n";
     std::cout << "  " << program_name << " --config configs/autoregressive_training.json\n";
     std::cout << "  " << program_name << " -c configs/masked_lm_training.json\n";
+    std::cout << "  " << program_name << " --generate outputs/autoregressive/model_checkpoint.bin\n";
+    std::cout << "  " << program_name << " --generate outputs/autoregressive/model_checkpoint.bin --length 100 --prompt 1,5,10\n";
     std::cout << "  " << program_name << " --validate configs/fine_tuning.json\n\n";
 }
 
@@ -95,6 +106,117 @@ bool validate_config(const std::string& config_file) {
     }
 }
 
+int generate_from_checkpoint(const std::string& checkpoint_path, const std::vector<std::string>& extra_args) {
+    LoopOS::Utils::ModuleLogger logger("GENERATE");
+    
+    // Parse options
+    int length = 50;
+    std::vector<int> prompt = {1, 2, 3};
+    std::string tokenizer_path = "outputs/tokenizer.vocab";
+    bool decode_output = true;
+    
+    for (size_t i = 0; i < extra_args.size(); i++) {
+        if (extra_args[i] == "--length" && i + 1 < extra_args.size()) {
+            length = std::stoi(extra_args[i + 1]);
+            i++;
+        } else if (extra_args[i] == "--prompt" && i + 1 < extra_args.size()) {
+            // Parse comma-separated token IDs
+            prompt.clear();
+            std::string prompt_str = extra_args[i + 1];
+            std::stringstream ss(prompt_str);
+            std::string token;
+            while (std::getline(ss, token, ',')) {
+                prompt.push_back(std::stoi(token));
+            }
+            i++;
+        } else if (extra_args[i] == "--tokenizer" && i + 1 < extra_args.size()) {
+            tokenizer_path = extra_args[i + 1];
+            i++;
+        } else if (extra_args[i] == "--no-decode") {
+            decode_output = false;
+        }
+    }
+    
+    logger.info("=== LoopOS Text Generation ===");
+    logger.info("Checkpoint: " + checkpoint_path);
+    logger.info("Prompt tokens: " + std::to_string(prompt.size()));
+    logger.info("Generation length: " + std::to_string(length));
+    logger.info("");
+    
+    // Load tokenizer if available
+    std::unique_ptr<Utils::Tokenizer> tokenizer;
+    if (decode_output) {
+        try {
+            tokenizer = std::make_unique<Utils::Tokenizer>();
+            tokenizer->load(tokenizer_path);
+            logger.info("Tokenizer loaded from: " + tokenizer_path);
+        } catch (const std::exception& e) {
+            logger.warning("Could not load tokenizer: " + std::string(e.what()));
+            logger.warning("Output will be shown as token IDs only");
+            decode_output = false;
+        }
+    }
+    
+    try {
+        // Note: We need to infer model architecture from checkpoint
+        // For now, use the standard config (256, 8, 2, 1024, 10000)
+        // TODO: Store architecture in checkpoint header and read it
+        logger.info("Loading model checkpoint...");
+        LoopOS::PreTraining::AutoregressiveTrainer trainer(256, 8, 2, 1024, 10000);
+        trainer.load_checkpoint(checkpoint_path);
+        logger.info("Model loaded successfully!");
+        logger.info("");
+        
+        // Generate
+        logger.info("Generating text...");
+        auto generated = trainer.generate(prompt, length);
+        
+        // Display results
+        logger.info("Generation complete!");
+        logger.info("Generated " + std::to_string(generated.size()) + " tokens");
+        logger.info("");
+        
+        std::cout << "Prompt tokens: [";
+        for (size_t i = 0; i < prompt.size(); i++) {
+            std::cout << prompt[i];
+            if (i < prompt.size() - 1) std::cout << ", ";
+        }
+        std::cout << "]\n\n";
+        
+        std::cout << "Generated tokens: [";
+        for (size_t i = 0; i < generated.size(); i++) {
+            std::cout << generated[i];
+            if (i < generated.size() - 1) std::cout << ", ";
+        }
+        std::cout << "]\n\n";
+        
+        std::cout << "New tokens only: [";
+        for (size_t i = prompt.size(); i < generated.size(); i++) {
+            std::cout << generated[i];
+            if (i < generated.size() - 1) std::cout << ", ";
+        }
+        std::cout << "]\n\n";
+        
+        // Decode to text if tokenizer is available
+        if (decode_output && tokenizer) {
+            std::cout << "=== Decoded Text ===\n";
+            std::cout << "Full output:\n  \"" << tokenizer->decode(generated) << "\"\n\n";
+            
+            // Show new tokens only
+            std::vector<int> new_tokens(generated.begin() + prompt.size(), generated.end());
+            if (!new_tokens.empty()) {
+                std::cout << "Generated text (without prompt):\n  \"" << tokenizer->decode(new_tokens) << "\"\n";
+            }
+        }
+        
+        return 0;
+        
+    } catch (const std::exception& e) {
+        logger.error("Generation failed: " + std::string(e.what()));
+        return 1;
+    }
+}
+
 int main(int argc, char* argv[]) {
     // Initialize logger
     LoopOS::Utils::Logger::instance().set_log_directory("logs");
@@ -131,6 +253,20 @@ int main(int argc, char* argv[]) {
         }
         
         return validate_config(args[2]) ? 0 : 1;
+    }
+    
+    // Handle generate
+    if (command == "--generate") {
+        if (argc < 3) {
+            std::cerr << "Error: --generate requires a checkpoint file path\n";
+            print_usage(args[0]);
+            return 1;
+        }
+        
+        std::string checkpoint_path = args[2];
+        std::vector<std::string> extra_args(args.begin() + 3, args.end());
+        
+        return generate_from_checkpoint(checkpoint_path, extra_args);
     }
     
     // Handle config execution

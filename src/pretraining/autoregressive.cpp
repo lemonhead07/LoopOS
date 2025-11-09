@@ -151,6 +151,8 @@ std::vector<int> AutoregressiveTrainer::generate(const std::vector<int>& prompt,
 }
 
 float AutoregressiveTrainer::compute_loss(const std::vector<int>& input_ids, const std::vector<int>& target_ids) {
+    PROFILE_FUNCTION();
+    
     // Cross-entropy loss for language modeling
     // Loss = -sum(log(P(target_i | input_1, ..., input_i)))
     
@@ -209,6 +211,8 @@ float AutoregressiveTrainer::compute_loss(const std::vector<int>& input_ids, con
 }
 
 float AutoregressiveTrainer::compute_loss_silent(const std::vector<int>& input_ids, const std::vector<int>& target_ids) {
+    PROFILE_FUNCTION();
+    
     // Cross-entropy loss for language modeling (no logging for batch training)
     // Loss = -sum(log(P(target_i | input_1, ..., input_i)))
     
@@ -247,6 +251,7 @@ float AutoregressiveTrainer::compute_loss_silent(const std::vector<int>& input_i
 }
 
 TrainingMetrics AutoregressiveTrainer::train_step_with_metrics(const std::vector<int>& input_ids, float learning_rate) {
+    PROFILE_FUNCTION();
     // Autoregressive training: predict next token
     // Returns metrics without logging for use in epoch training
     
@@ -331,10 +336,11 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                                         int prefetch_batches,
                                         int num_workers,
                                         bool shuffle) {
+    PROFILE_FUNCTION();
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
     
-    // Adaptive batch sizing - starts small and finds optimal size
-    size_t current_batch_size = 2;  // Start conservative
+    // Use a reasonable batch size (can be made configurable later)
+    size_t current_batch_size = 32;  // Good balance of throughput and memory
     const size_t MIN_BATCH_SIZE = 1;
     const size_t MAX_BATCH_SIZE = 128;
     
@@ -356,14 +362,19 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
     logger.info("Using async DataLoader with " + std::to_string(loader_config.num_workers) + 
                 " workers, prefetch=" + std::to_string(loader_config.prefetch_batches));
     
+    // Set log level to INFO during training to avoid DEBUG messages interfering with progress bar
+    if (show_progress) {
+        Utils::Logger::instance().set_min_level(Utils::LogLevel::INFO);
+    }
+    
     for (int epoch = 0; epoch < num_epochs; ++epoch) {
         logger.info("=== Epoch " + std::to_string(epoch + 1) + "/" + std::to_string(num_epochs) + " ===");
-        logger.info("Using ADAPTIVE batching (starting batch_size=" + std::to_string(current_batch_size) + ")");
+        logger.info("Using batch_size=" + std::to_string(current_batch_size) + " (from config)");
         
         // Start epoch with data loader
         data_loader.start_epoch();
         
-        Utils::ProgressBar progress(dataset.size(), "Training", 50);
+        size_t total_sequences = dataset.size();  // Total sequences for progress calculation
         
         float epoch_loss = 0.0f;
         double epoch_time = 0.0;
@@ -499,7 +510,7 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 logger.debug(timing_oss.str());
             }
             
-            // Update progress bar and metrics display (only every 10 batches or at end)
+            // Update single-line progress bar with metrics (only every 10 batches or at end)
             if (show_progress && ((sequences_processed % 10 == 0) || data_loader.is_epoch_complete())) {
                 // Calculate metrics
                 float avg_loss = epoch_loss / sequences_processed;
@@ -507,45 +518,52 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
                 double elapsed_sec = epoch_timer.elapsed_s();
                 int mins = static_cast<int>(elapsed_sec / 60);
                 int secs = static_cast<int>(elapsed_sec) % 60;
+                double data_wait_pct = (total_data_wait_time / epoch_time) * 100.0;
                 
-                // On first iteration, just print. On subsequent iterations, move up and overwrite
-                if (sequences_processed > actual_batch_size) {
-                    // Move up 8 lines (7 for metrics + blank line, 1 for progress bar)
-                    Utils::ConsoleDisplay::move_up(8);
+                // Build single-line display with progress bar and metrics
+                float progress_pct = (static_cast<float>(sequences_processed) / total_sequences) * 100.0f;
+                size_t bar_width = 50;
+                size_t filled = static_cast<size_t>(bar_width * progress_pct / 100.0f);
+                
+                // Calculate ETA
+                double sequences_per_sec = sequences_processed / elapsed_sec;
+                double remaining_sequences = total_sequences - sequences_processed;
+                double eta_sec = remaining_sequences / sequences_per_sec;
+                int eta_mins = static_cast<int>(eta_sec / 60);
+                int eta_secs = static_cast<int>(eta_sec) % 60;
+                
+                // Use stderr to avoid mixing with log output, and ensure clean line update
+                std::cerr << "\r\033[K";  // Carriage return + clear line
+                
+                // Progress bar
+                std::cerr << "Training [";
+                for (size_t i = 0; i < bar_width; ++i) {
+                    if (i < filled) std::cerr << "█";
+                    else if (i == filled) std::cerr << "▓";
+                    else std::cerr << "░";
+                }
+                std::cerr << "] ";
+                
+                // Progress numbers and metrics
+                std::cerr << sequences_processed << "/" << total_sequences 
+                         << " (" << std::fixed << std::setprecision(1) << progress_pct << "%) ";
+                
+                // Metrics: Loss, tokens/sec, batch size
+                std::cerr << "| Loss: " << std::fixed << std::setprecision(2) << avg_loss 
+                         << " | " << std::fixed << std::setprecision(0) << avg_tokens_per_sec << " tok/s"
+                         << " | Batch: " << current_batch_size;
+                
+                // ETA
+                if (sequences_processed < total_sequences && sequences_processed > 0) {
+                    std::cerr << " | ETA: " << eta_mins << "m " << eta_secs << "s";
                 }
                 
-                // Print/update metrics block
-                Utils::ConsoleDisplay::clear_line();
-                std::cout << "Metrics:" << std::endl;
-                
-                Utils::ConsoleDisplay::clear_line();
-                std::cout << "  Loss: " << std::fixed << std::setprecision(3) << avg_loss << std::endl;
-                
-                Utils::ConsoleDisplay::clear_line();
-                std::cout << "  Avg tokens/sec: " << std::fixed << std::setprecision(1) 
-                         << avg_tokens_per_sec << std::endl;
-                
-                Utils::ConsoleDisplay::clear_line();
-                std::cout << "  Batch size: " << current_batch_size << " (best: " << best_batch_size << ")" << std::endl;
-                
-                Utils::ConsoleDisplay::clear_line();
-                double data_wait_pct = (total_data_wait_time / epoch_time) * 100.0;
-                std::cout << "  Data wait: " << std::fixed << std::setprecision(1) 
-                         << data_wait_pct << "%" << std::endl;
-                
-                Utils::ConsoleDisplay::clear_line();
-                std::cout << "  Elapsed: " << mins << "m " << secs << "s" << std::endl;
-                
-                Utils::ConsoleDisplay::clear_line();
-                std::cout << std::endl;  // Blank line
-                
-                // Update progress bar on its own line
-                progress.update(sequences_processed);
+                std::cerr << std::flush;
             }
         }
         
         if (show_progress) {
-            progress.finish();
+            std::cerr << std::endl;  // Move to next line after progress bar
         }
         
         // Print epoch summary with detailed timing breakdown

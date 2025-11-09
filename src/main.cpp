@@ -5,7 +5,6 @@
 #include "math/cpu_matrix.hpp"
 #include "utils/logger.hpp"
 #include "utils/memory_manager.hpp"
-#include "utils/thread_pool.hpp"
 #include "utils/cpu_features.hpp"
 #include <iostream>
 #include <memory>
@@ -52,11 +51,6 @@ int main() {
     // Initialize memory manager with 80% of available memory
     main_logger.info("\nInitializing memory manager...");
     Utils::MemoryManager::get_instance().initialize(0.8f);
-    
-    // Initialize thread pool with hardware thread count
-    main_logger.info("Initializing thread pool...");
-    auto& thread_pool = Utils::ThreadPool::get_instance();
-    main_logger.info("Thread pool initialized with " + std::to_string(thread_pool.size()) + " threads");
     
     // Select optimal matrix backend based on hardware
     main_logger.info("\nSelecting optimal matrix backend...");
