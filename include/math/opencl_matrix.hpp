@@ -5,6 +5,7 @@
 #include "math/matrix_interface.hpp"
 #include <memory>
 #include <string>
+#include <map>
 
 namespace LoopOS {
 namespace Math {
@@ -88,6 +89,17 @@ private:
     static cl_context context_;
     static cl_command_queue queue_;
     static bool initialized_;
+    
+    // GPU Memory Pool (reduces allocation overhead)
+    struct BufferPool {
+        std::map<size_t, std::vector<cl_mem>> free_buffers;
+        std::map<cl_mem, size_t> buffer_sizes;  // Track size of allocated buffers
+        
+        cl_mem acquire(size_t size);
+        void release(cl_mem buffer);
+        void clear();
+    };
+    static BufferPool buffer_pool_;
     
     // Compiled kernels (shared)
     static cl_program program_;

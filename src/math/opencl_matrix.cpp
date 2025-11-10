@@ -32,6 +32,8 @@ cl_kernel OpenCLMatrix::kernel_sqrt_ = nullptr;
 cl_kernel OpenCLMatrix::kernel_pow_ = nullptr;
 cl_kernel OpenCLMatrix::kernel_sum_ = nullptr;
 
+OpenCLMatrix::BufferPool OpenCLMatrix::buffer_pool_;
+
 void OpenCLMatrix::check_error(cl_int err, const std::string& operation) {
     if (err != CL_SUCCESS) {
         throw std::runtime_error("OpenCL error in " + operation + ": " + std::to_string(err));
@@ -180,6 +182,10 @@ void OpenCLMatrix::cleanup_opencl() {
     
     if (program_) clReleaseProgram(program_);
     if (queue_) clReleaseCommandQueue(queue_);
+    
+    // Clean up buffer pool
+    buffer_pool_.clear();
+    
     if (context_) clReleaseContext(context_);
     
     initialized_ = false;
@@ -194,6 +200,58 @@ bool OpenCLMatrix::is_available() {
     } catch (...) {
         return false;
     }
+}
+
+// Buffer pool implementation - reuses GPU memory buffers
+cl_mem OpenCLMatrix::BufferPool::acquire(size_t size) {
+    // Round size to nearest power of 2 for better pooling
+    size_t rounded_size = 1;
+    while (rounded_size < size) rounded_size <<= 1;
+    
+    // Check if we have a free buffer of this size
+    auto it = free_buffers.find(rounded_size);
+    if (it != free_buffers.end() && !it->second.empty()) {
+        cl_mem buffer = it->second.back();
+        it->second.pop_back();
+        return buffer;
+    }
+    
+    // Allocate new buffer
+    cl_int err;
+    cl_mem buffer = clCreateBuffer(OpenCLMatrix::context_, CL_MEM_READ_WRITE,
+                                    size * sizeof(float), nullptr, &err);
+    OpenCLMatrix::check_error(err, "buffer pool allocation");
+    
+    // Track buffer size
+    buffer_sizes[buffer] = rounded_size;
+    
+    return buffer;
+}
+
+void OpenCLMatrix::BufferPool::release(cl_mem buffer) {
+    // Find buffer size
+    auto it = buffer_sizes.find(buffer);
+    if (it == buffer_sizes.end()) {
+        // Unknown buffer, just release it
+        clReleaseMemObject(buffer);
+        return;
+    }
+    
+    size_t size = it->second;
+    
+    // Return to pool for reuse
+    free_buffers[size].push_back(buffer);
+}
+
+void OpenCLMatrix::BufferPool::clear() {
+    // Release all pooled buffers
+    for (auto& [size, buffers] : free_buffers) {
+        for (cl_mem buffer : buffers) {
+            clReleaseMemObject(buffer);
+        }
+    }
+    free_buffers.clear();
+    buffer_sizes.clear();
 }
 
 // Constructors
@@ -242,15 +300,14 @@ OpenCLMatrix::OpenCLMatrix(size_t rows, size_t cols, float initial_value)
 
 OpenCLMatrix::~OpenCLMatrix() {
     if (device_buffer_) {
-        clReleaseMemObject(device_buffer_);
+        // Return buffer to pool for reuse instead of releasing
+        buffer_pool_.release(device_buffer_);
     }
 }
 
 void OpenCLMatrix::allocate_device_buffer() {
-    cl_int err;
-    device_buffer_ = clCreateBuffer(context_, CL_MEM_READ_WRITE, 
-                                    size() * sizeof(float), nullptr, &err);
-    check_error(err, "allocate device buffer");
+    // Use buffer pool to avoid allocation overhead
+    device_buffer_ = buffer_pool_.acquire(size());
 }
 
 void OpenCLMatrix::sync_to_device() {
@@ -347,7 +404,7 @@ OpenCLMatrix& OpenCLMatrix::operator=(const OpenCLMatrix& other) {
         device_data_valid_ = false;
         
         if (device_buffer_) {
-            clReleaseMemObject(device_buffer_);
+            buffer_pool_.release(device_buffer_);
         }
         allocate_device_buffer();
     }
@@ -357,7 +414,7 @@ OpenCLMatrix& OpenCLMatrix::operator=(const OpenCLMatrix& other) {
 OpenCLMatrix& OpenCLMatrix::operator=(OpenCLMatrix&& other) noexcept {
     if (this != &other) {
         if (device_buffer_) {
-            clReleaseMemObject(device_buffer_);
+            buffer_pool_.release(device_buffer_);
         }
         
         rows_ = other.rows_;
