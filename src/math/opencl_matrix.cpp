@@ -395,12 +395,17 @@ std::unique_ptr<IMatrix> OpenCLMatrix::matmul(const IMatrix& other) const {
     clSetKernelArg(kernel_matmul_tiled_, 4, sizeof(int), &K);
     clSetKernelArg(kernel_matmul_tiled_, 5, sizeof(int), &N);
     
-    // Execute kernel with optimized tiling (16x16 work groups for better cache utilization)
+    // Adaptive tile sizing for cache efficiency
+    // Smaller tiles (8x8) for smaller matrices to reduce cache pressure
+    // Larger tiles (16x16) for bigger matrices to amortize overhead
+    int tile_size = (M < 256 && N < 256) ? 8 : 16;
+    
+    // Execute kernel with cache-optimized tiling
     size_t global_size[2] = {
-        static_cast<size_t>(((M + 15) / 16) * 16),
-        static_cast<size_t>(((N + 15) / 16) * 16)
+        static_cast<size_t>(((M + tile_size - 1) / tile_size) * tile_size),
+        static_cast<size_t>(((N + tile_size - 1) / tile_size) * tile_size)
     };
-    size_t local_size[2] = {16, 16};
+    size_t local_size[2] = {static_cast<size_t>(tile_size), static_cast<size_t>(tile_size)};
     
     cl_int err = clEnqueueNDRangeKernel(queue_, kernel_matmul_tiled_, 2, nullptr,
                                         global_size, local_size, 0, nullptr, nullptr);
