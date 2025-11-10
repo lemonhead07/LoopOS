@@ -66,6 +66,7 @@ DataConfig DataConfig::from_json(const json& j) {
     DataConfig config;
     config.input_file = get_optional<std::string>(j, "input_file");
     config.output_dir = get_optional<std::string>(j, "output_dir");
+    config.tokenizer_vocab = get_optional<std::string>(j, "tokenizer_vocab");
     config.pretrained_weights = get_optional<std::string>(j, "pretrained_weights");
     config.training_data = get_optional<std::string>(j, "training_data");
     config.reasoning_examples = get_optional<std::string>(j, "reasoning_examples");

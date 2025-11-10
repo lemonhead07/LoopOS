@@ -5,6 +5,7 @@
 #include <map>
 #include <iostream>
 #include <chrono>
+#include <filesystem>
 
 namespace Utils {
 
@@ -84,7 +85,36 @@ std::vector<std::string> Tokenizer::tokenize_text(const std::string& text) {
 void Tokenizer::build_vocabulary(const std::string& corpus_file,
                                  int vocab_size,
                                  int min_frequency) {
-    build_vocabulary_from_files({corpus_file}, vocab_size, min_frequency);
+    // Check if it's a directory or a file
+    if (std::filesystem::is_directory(corpus_file)) {
+        build_vocabulary_from_directory(corpus_file, vocab_size, min_frequency);
+    } else {
+        build_vocabulary_from_files({corpus_file}, vocab_size, min_frequency);
+    }
+}
+
+void Tokenizer::build_vocabulary_from_directory(const std::string& directory,
+                                               int vocab_size,
+                                               int min_frequency) {
+    Logger::instance().info("Tokenizer", "Scanning directory recursively: " + directory);
+    
+    // Collect all files in directory recursively
+    std::vector<std::string> files;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+        if (entry.is_regular_file()) {
+            files.push_back(entry.path().string());
+        }
+    }
+    
+    if (files.empty()) {
+        Logger::instance().error("Tokenizer", "No files found in directory: " + directory);
+        return;
+    }
+    
+    Logger::instance().info("Tokenizer", "Found " + std::to_string(files.size()) + " files to process");
+    
+    // Use the existing build_vocabulary_from_files function
+    build_vocabulary_from_files(files, vocab_size, min_frequency);
 }
 
 void Tokenizer::build_vocabulary_from_files(const std::vector<std::string>& corpus_files,

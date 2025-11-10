@@ -8,6 +8,7 @@
 #include "utils/benchmark.hpp"
 #include "utils/profiler.hpp"
 #include "utils/system_info.hpp"
+#include "utils/streaming_data_loader.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -127,7 +128,10 @@ void ComputationExecutor::run_autoregressive() {
     ::Utils::Tokenizer tokenizer;
     
     std::string vocab_path;
-    if (data_config.output_dir.has_value()) {
+    if (data_config.tokenizer_vocab.has_value()) {
+        // Use specified tokenizer vocabulary file
+        vocab_path = data_config.tokenizer_vocab.value();
+    } else if (data_config.output_dir.has_value()) {
         vocab_path = data_config.output_dir.value() + "/tokenizer.vocab";
     } else {
         vocab_path = "outputs/tokenizer.vocab";
@@ -171,43 +175,93 @@ void ComputationExecutor::run_autoregressive() {
         actual_vocab_size
     );
     
+    // Enable profiling
+    Utils::Profiler::set_enabled(true);
+    
     // Load and tokenize data
     logger_.info("Loading training data...");
-    std::vector<std::vector<int>> sequences;
+    
     if (data_config.input_file.has_value()) {
-        sequences = tokenize_file_with_vocab(data_config.input_file.value(), tokenizer);
+        std::string input_path = data_config.input_file.value();
         
-        // Chunk long sequences to max_length if specified
-        if (training_config.max_length.has_value()) {
-            int max_len = training_config.max_length.value();
-            std::vector<std::vector<int>> chunked_sequences;
-            size_t total_chunks = 0;
+        // Check if input is a directory or a file
+        if (std::filesystem::is_directory(input_path)) {
+            logger_.info("Input is a directory, using StreamingDataLoader (memory-efficient)...");
             
-            for (const auto& seq : sequences) {
-                if (seq.size() <= static_cast<size_t>(max_len)) {
-                    chunked_sequences.push_back(seq);
-                } else {
-                    // Split into chunks
-                    for (size_t i = 0; i < seq.size(); i += max_len) {
-                        size_t chunk_size = std::min(static_cast<size_t>(max_len), seq.size() - i);
-                        std::vector<int> chunk(seq.begin() + i, seq.begin() + i + chunk_size);
-                        chunked_sequences.push_back(chunk);
-                        total_chunks++;
+            // Use streaming data loader for directories
+            Utils::StreamingDataLoader::Config loader_config;
+            loader_config.batch_size = training_config.batch_size;
+            loader_config.prefetch_batches = training_config.prefetch_batches.value_or(4);  // Increased from 2
+            loader_config.num_workers = training_config.num_workers.value_or(4);  // Increased from 2 to match CPU cores
+            loader_config.shuffle = training_config.shuffle.value_or(true);
+            loader_config.queue_capacity = 32;  // Increased from 4 to allow more prefetching
+            loader_config.max_sequences_in_memory = 50000;  // Increased from 10K to ~400MB RAM usage
+            loader_config.max_length = training_config.max_length.value_or(256);
+            
+            Utils::StreamingDataLoader streaming_loader(input_path, tokenizer, loader_config);
+            
+            logger_.info("Using StreamingDataLoader with " + 
+                        std::to_string(loader_config.num_workers) + " workers, " +
+                        std::to_string(loader_config.max_sequences_in_memory) + " max sequences in memory");
+            logger_.info("");
+            logger_.info("Starting training...");
+            logger_.info("");
+            
+            // Train with streaming data loader
+            trainer.train_epoch_streaming(streaming_loader, 
+                                        training_config.learning_rate,
+                                        training_config.num_epochs,
+                                        true);
+        } else {
+            // For single files, use traditional approach
+            logger_.info("Input is a file, loading into memory...");
+            std::vector<std::vector<int>> sequences;
+            sequences = tokenize_file_with_vocab(input_path, tokenizer);
+        
+            // Chunk long sequences to max_length if specified
+            if (training_config.max_length.has_value()) {
+                int max_len = training_config.max_length.value();
+                std::vector<std::vector<int>> chunked_sequences;
+                size_t total_chunks = 0;
+                
+                for (const auto& seq : sequences) {
+                    if (seq.size() <= static_cast<size_t>(max_len)) {
+                        chunked_sequences.push_back(seq);
+                    } else {
+                        // Split into chunks
+                        for (size_t i = 0; i < seq.size(); i += max_len) {
+                            size_t chunk_size = std::min(static_cast<size_t>(max_len), seq.size() - i);
+                            std::vector<int> chunk(seq.begin() + i, seq.begin() + i + chunk_size);
+                            chunked_sequences.push_back(chunk);
+                            total_chunks++;
+                        }
                     }
                 }
+                
+                if (total_chunks > 0) {
+                    logger_.info("Chunked " + std::to_string(total_chunks) + " long sequences into max_length=" + std::to_string(max_len));
+                    logger_.info("Total sequences after chunking: " + std::to_string(chunked_sequences.size()));
+                }
+                
+                sequences = chunked_sequences;
             }
             
-            if (total_chunks > 0) {
-                logger_.info("Chunked " + std::to_string(total_chunks) + " long sequences into max_length=" + std::to_string(max_len));
-                logger_.info("Total sequences after chunking: " + std::to_string(chunked_sequences.size()));
-            }
+            logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
+            logger_.info("Starting training...");
+            logger_.info("");
             
-            sequences = chunked_sequences;
+            // Use configured data loader parameters if provided, otherwise use defaults
+            int prefetch_batches = training_config.prefetch_batches.value_or(3);
+            int num_workers = training_config.num_workers.value_or(2);
+            bool shuffle = training_config.shuffle.value_or(true);
+            
+            trainer.train_epoch(sequences, training_config.learning_rate, 
+                            training_config.num_epochs, true,
+                            prefetch_batches, num_workers, shuffle);
         }
-        
-        logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
     } else {
         logger_.warning("No input file specified, using dummy data");
+        std::vector<std::vector<int>> sequences;
         // Create some dummy data
         for (int i = 0; i < 10; ++i) {
             std::vector<int> seq;
@@ -216,23 +270,19 @@ void ComputationExecutor::run_autoregressive() {
             }
             sequences.push_back(seq);
         }
+        
+        logger_.info("Starting training...");
+        logger_.info("");
+        
+        // Use configured data loader parameters if provided, otherwise use defaults
+        int prefetch_batches = training_config.prefetch_batches.value_or(3);
+        int num_workers = training_config.num_workers.value_or(2);
+        bool shuffle = training_config.shuffle.value_or(true);
+        
+        trainer.train_epoch(sequences, training_config.learning_rate, 
+                        training_config.num_epochs, true,
+                        prefetch_batches, num_workers, shuffle);
     }
-    
-    // Training with progress bar
-    logger_.info("Starting training...");
-    logger_.info("");
-    
-    // Enable profiling
-    Utils::Profiler::set_enabled(true);
-    
-    // Use configured data loader parameters if provided, otherwise use defaults
-    int prefetch_batches = training_config.prefetch_batches.value_or(3);
-    int num_workers = training_config.num_workers.value_or(2);
-    bool shuffle = training_config.shuffle.value_or(true);
-    
-    trainer.train_epoch(sequences, training_config.learning_rate, 
-                       training_config.num_epochs, true,
-                       prefetch_batches, num_workers, shuffle);
     
     logger_.info("");
     logger_.info("Training completed!");
@@ -946,6 +996,114 @@ std::vector<std::vector<int>> ComputationExecutor::tokenize_file_with_vocab(cons
     logger_.info("Cached tokenized data to: " + cache_filename);
     
     return sequences;
+}
+
+// Tokenize all files in a directory recursively using vocabulary-based tokenizer
+std::vector<std::vector<int>> ComputationExecutor::tokenize_directory_with_vocab(const std::string& directory, ::Utils::Tokenizer& tokenizer) {
+    PROFILE_FUNCTION();
+    
+    logger_.info("Tokenizing directory with vocabulary tokenizer: " + directory);
+    Utils::Timer tokenize_timer;
+    
+    // Create a cache filename based on the directory path
+    std::string dir_name = directory;
+    std::replace(dir_name.begin(), dir_name.end(), '/', '_');
+    std::string cache_filename = "data/cache/" + dir_name + ".vocab_tokenized.bin";
+    
+    // Ensure cache directory exists
+    std::filesystem::create_directories("data/cache");
+    
+    // Check for cached tokenized data
+    if (std::filesystem::exists(cache_filename)) {
+        logger_.info("Loading from cache: " + cache_filename);
+        auto sequences = load_tokenized_cache(cache_filename);
+        if (!sequences.empty()) {
+            logger_.info("Cache loaded in " + std::to_string(tokenize_timer.elapsed_ms() / 1000.0) + "s");
+            logger_.info("Total sequences: " + std::to_string(sequences.size()));
+            return sequences;
+        }
+    }
+    
+    // Collect all files in directory recursively
+    std::vector<std::string> files;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+        if (entry.is_regular_file()) {
+            files.push_back(entry.path().string());
+        }
+    }
+    
+    if (files.empty()) {
+        logger_.error("No files found in directory: " + directory);
+        return {};
+    }
+    
+    logger_.info("Found " + std::to_string(files.size()) + " files to process");
+    
+    // Process all files
+    std::vector<std::vector<int>> all_sequences;
+    size_t total_tokens = 0;
+    size_t max_seq_len = 0;
+    size_t min_seq_len = std::numeric_limits<size_t>::max();
+    size_t total_lines = 0;
+    
+    for (size_t file_idx = 0; file_idx < files.size(); ++file_idx) {
+        const auto& filepath = files[file_idx];
+        
+        if (file_idx % 10 == 0) {
+            logger_.info("Processing file " + std::to_string(file_idx + 1) + "/" + 
+                        std::to_string(files.size()) + ": " + filepath);
+        }
+        
+        // Read file line by line and tokenize
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            logger_.error("Cannot open file: " + filepath);
+            continue;
+        }
+        
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.empty()) continue;
+            
+            // Encode the line using the tokenizer
+            auto tokens = tokenizer.encode(line, false);  // Don't add BOS/EOS for each line
+            
+            if (!tokens.empty()) {
+                total_tokens += tokens.size();
+                max_seq_len = std::max(max_seq_len, tokens.size());
+                min_seq_len = std::min(min_seq_len, tokens.size());
+                all_sequences.push_back(std::move(tokens));
+            }
+            
+            total_lines++;
+            if (total_lines % 50000 == 0) {
+                logger_.info("Processed " + std::to_string(total_lines) + " lines, " + 
+                           std::to_string(all_sequences.size()) + " sequences...");
+            }
+        }
+        file.close();
+    }
+    
+    double tokenize_time = tokenize_timer.elapsed_ms();
+    
+    logger_.info("Tokenization complete in " + std::to_string(tokenize_time / 1000.0) + "s");
+    logger_.info("Processed " + std::to_string(files.size()) + " files");
+    logger_.info("Total sequences: " + std::to_string(all_sequences.size()));
+    logger_.info("Total tokens: " + std::to_string(total_tokens));
+    if (all_sequences.size() > 0) {
+        logger_.info("Avg sequence length: " + std::to_string(total_tokens / all_sequences.size()));
+    }
+    if (min_seq_len != std::numeric_limits<size_t>::max()) {
+        logger_.info("Min sequence length: " + std::to_string(min_seq_len));
+    }
+    logger_.info("Max sequence length: " + std::to_string(max_seq_len));
+    logger_.info("Throughput: " + std::to_string(total_tokens / (tokenize_time / 1000.0)) + " tokens/sec");
+    
+    // Cache tokenized data for future runs
+    save_tokenized_cache(cache_filename, all_sequences);
+    logger_.info("Cached tokenized data to: " + cache_filename);
+    
+    return all_sequences;
 }
 
 // Helper function to create output directory

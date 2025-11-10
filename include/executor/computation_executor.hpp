@@ -41,6 +41,7 @@ private:
     // Helper methods
     std::vector<std::vector<int>> tokenize_file(const std::string& filename, int vocab_size);
     std::vector<std::vector<int>> tokenize_file_with_vocab(const std::string& filename, ::Utils::Tokenizer& tokenizer);
+    std::vector<std::vector<int>> tokenize_directory_with_vocab(const std::string& directory, ::Utils::Tokenizer& tokenizer);
     void save_tokenized_cache(const std::string& filename, const std::vector<std::vector<int>>& sequences);
     std::vector<std::vector<int>> load_tokenized_cache(const std::string& filename);
     void ensure_output_directory(const std::string& output_dir);

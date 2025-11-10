@@ -57,6 +57,7 @@ struct TrainingConfig {
 struct DataConfig {
     std::optional<std::string> input_file;
     std::optional<std::string> output_dir;
+    std::optional<std::string> tokenizer_vocab;
     std::optional<std::string> pretrained_weights;
     std::optional<std::string> training_data;
     std::optional<std::string> reasoning_examples;

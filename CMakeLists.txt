@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find OpenMP
 find_package(OpenMP REQUIRED)
 
+# Find OpenCL
+find_package(OpenCL REQUIRED)
+include_directories(${OpenCL_INCLUDE_DIRS})
+add_definitions(-DCL_TARGET_OPENCL_VERSION=300)
+
 # Compiler flags for maximum optimization
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -mtune=native -funroll-loops -ffast-math")
@@ -71,6 +76,7 @@ add_library(utils STATIC
     src/utils/cpu_features.cpp
     src/utils/model_loader.cpp
     src/utils/data_loader.cpp
+    src/utils/streaming_data_loader.cpp
     src/utils/lr_scheduler.cpp
 )
 
@@ -86,12 +92,13 @@ target_link_libraries(autoencoder_tokenizer utils math_backend)
 # Math Library (Abstracted Matrix Backend)
 add_library(math_backend STATIC
     src/math/cpu_matrix.cpp
+    src/math/opencl_matrix.cpp
     src/math/parameter.cpp
     src/math/autograd.cpp
     src/utils/memory_manager.cpp
     src/utils/benchmark.cpp
 )
-target_link_libraries(math_backend utils OpenMP::OpenMP_CXX pthread)
+target_link_libraries(math_backend utils OpenMP::OpenMP_CXX ${OpenCL_LIBRARIES} pthread)
 
 # Transformer Library
 add_library(transformer STATIC
