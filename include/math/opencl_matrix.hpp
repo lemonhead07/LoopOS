@@ -92,6 +92,7 @@ private:
     // Compiled kernels (shared)
     static cl_program program_;
     static cl_kernel kernel_matmul_;
+    static cl_kernel kernel_matmul_tiled_;
     static cl_kernel kernel_add_;
     static cl_kernel kernel_multiply_scalar_;
     static cl_kernel kernel_hadamard_;

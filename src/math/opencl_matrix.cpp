@@ -18,6 +18,7 @@ bool OpenCLMatrix::initialized_ = false;
 
 cl_program OpenCLMatrix::program_ = nullptr;
 cl_kernel OpenCLMatrix::kernel_matmul_ = nullptr;
+cl_kernel OpenCLMatrix::kernel_matmul_tiled_ = nullptr;
 cl_kernel OpenCLMatrix::kernel_add_ = nullptr;
 cl_kernel OpenCLMatrix::kernel_multiply_scalar_ = nullptr;
 cl_kernel OpenCLMatrix::kernel_hadamard_ = nullptr;
@@ -116,6 +117,9 @@ void OpenCLMatrix::compile_kernels() {
     kernel_matmul_ = clCreateKernel(program_, "matmul_tiled", &err);
     check_error(err, "create matmul kernel");
     
+    kernel_matmul_tiled_ = clCreateKernel(program_, "matmul_tiled", &err);
+    check_error(err, "create matmul_tiled kernel");
+    
     kernel_add_ = clCreateKernel(program_, "add", &err);
     check_error(err, "create add kernel");
     
@@ -156,6 +160,7 @@ void OpenCLMatrix::cleanup_opencl() {
     if (!initialized_) return;
     
     if (kernel_matmul_) clReleaseKernel(kernel_matmul_);
+    if (kernel_matmul_tiled_) clReleaseKernel(kernel_matmul_tiled_);
     if (kernel_add_) clReleaseKernel(kernel_add_);
     if (kernel_multiply_scalar_) clReleaseKernel(kernel_multiply_scalar_);
     if (kernel_hadamard_) clReleaseKernel(kernel_hadamard_);
@@ -382,23 +387,24 @@ std::unique_ptr<IMatrix> OpenCLMatrix::matmul(const IMatrix& other) const {
     int K = static_cast<int>(cols_);
     int N = static_cast<int>(other_ocl->cols_);
     
-    clSetKernelArg(kernel_matmul_, 0, sizeof(cl_mem), &device_buffer_);
-    clSetKernelArg(kernel_matmul_, 1, sizeof(cl_mem), &other_ocl->device_buffer_);
-    clSetKernelArg(kernel_matmul_, 2, sizeof(cl_mem), &result->device_buffer_);
-    clSetKernelArg(kernel_matmul_, 3, sizeof(int), &M);
-    clSetKernelArg(kernel_matmul_, 4, sizeof(int), &K);
-    clSetKernelArg(kernel_matmul_, 5, sizeof(int), &N);
+    // Use tiled kernel for better performance
+    clSetKernelArg(kernel_matmul_tiled_, 0, sizeof(cl_mem), &device_buffer_);
+    clSetKernelArg(kernel_matmul_tiled_, 1, sizeof(cl_mem), &other_ocl->device_buffer_);
+    clSetKernelArg(kernel_matmul_tiled_, 2, sizeof(cl_mem), &result->device_buffer_);
+    clSetKernelArg(kernel_matmul_tiled_, 3, sizeof(int), &M);
+    clSetKernelArg(kernel_matmul_tiled_, 4, sizeof(int), &K);
+    clSetKernelArg(kernel_matmul_tiled_, 5, sizeof(int), &N);
     
-    // Execute kernel with tiling (16x16 work groups)
+    // Execute kernel with optimized tiling (16x16 work groups for better cache utilization)
     size_t global_size[2] = {
-        ((M + 15) / 16) * 16,
-        ((N + 15) / 16) * 16
+        static_cast<size_t>(((M + 15) / 16) * 16),
+        static_cast<size_t>(((N + 15) / 16) * 16)
     };
     size_t local_size[2] = {16, 16};
     
-    cl_int err = clEnqueueNDRangeKernel(queue_, kernel_matmul_, 2, nullptr,
+    cl_int err = clEnqueueNDRangeKernel(queue_, kernel_matmul_tiled_, 2, nullptr,
                                         global_size, local_size, 0, nullptr, nullptr);
-    check_error(err, "matmul kernel execution");
+    check_error(err, "matmul_tiled kernel execution");
     
     result->device_data_valid_ = true;
     result->host_data_valid_ = false;
@@ -428,9 +434,11 @@ std::unique_ptr<IMatrix> OpenCLMatrix::add(const IMatrix& other) const {
     clSetKernelArg(kernel_add_, 2, sizeof(cl_mem), &result->device_buffer_);
     clSetKernelArg(kernel_add_, 3, sizeof(int), &total_size);
     
-    size_t global_size = total_size;
+    // Use larger work groups for better GPU utilization (256 work items per group)
+    size_t global_size = ((total_size + 255) / 256) * 256;
+    size_t local_size = 256;
     cl_int err = clEnqueueNDRangeKernel(queue_, kernel_add_, 1, nullptr,
-                                        &global_size, nullptr, 0, nullptr, nullptr);
+                                        &global_size, &local_size, 0, nullptr, nullptr);
     check_error(err, "add kernel execution");
     
     result->device_data_valid_ = true;
