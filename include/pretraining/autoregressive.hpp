@@ -65,6 +65,9 @@ public:
     float compute_loss_silent(const std::vector<int>& input_ids, const std::vector<int>& target_ids);
     
 private:
+    // Helper: Perform embedding lookup (optimized for GPU when available)
+    std::unique_ptr<Math::IMatrix> embed_sequence(const std::vector<int>& token_ids);
+    
     std::unique_ptr<Transformer::Transformer> model_;
     int vocab_size_;
     int d_model_;
@@ -75,3 +78,4 @@ private:
 
 } // namespace PreTraining
 } // namespace LoopOS
+

@@ -1,6 +1,7 @@
 #include "pretraining/autoregressive.hpp"
 #include "utils/profiler.hpp"
 #include "math/cpu_matrix.hpp"
+#include "math/opencl_matrix.hpp"
 #include "math/autograd.hpp"
 #include "utils/logger.hpp"
 #include "utils/benchmark.hpp"
@@ -31,6 +32,50 @@ AutoregressiveTrainer::AutoregressiveTrainer(
     
     Utils::ModuleLogger logger("AUTOREGRESSIVE");
     logger.info("Created optimized transformer with batched operations");
+}
+
+// Optimized embedding: Uses GPU kernel when available, fallback to CPU
+std::unique_ptr<Math::IMatrix> AutoregressiveTrainer::embed_sequence(
+    const std::vector<int>& token_ids) 
+{
+    const auto* token_emb = model_->get_token_embedding();
+    const auto* pos_emb = model_->get_position_embedding();
+    size_t seq_len = token_ids.size();
+    
+    // Try GPU-accelerated embedding if using OpenCL backend
+    auto* token_opencl = dynamic_cast<const Math::OpenCLMatrix*>(token_emb);
+    auto* pos_opencl = dynamic_cast<const Math::OpenCLMatrix*>(pos_emb);
+    
+    if (token_opencl && pos_opencl) {
+        // GPU path: Keep embeddings on GPU, only upload token IDs
+        // This eliminates 768 MB download per batch!
+        return Math::OpenCLMatrix::embed_sequence_gpu(
+            *token_opencl, *pos_opencl, token_ids, model_->get_max_seq_len()
+        );
+    }
+    
+    // CPU fallback: Manual embedding lookup
+    auto result = Math::MatrixFactory::create(seq_len, d_model_);
+    const float* token_emb_data = token_emb->data();
+    const float* pos_emb_data = pos_emb->data();
+    float* result_data = result->data();
+    
+    for (size_t i = 0; i < seq_len; ++i) {
+        int token_id = token_ids[i];
+        if (token_id >= 0 && token_id < vocab_size_) {
+            size_t pos_idx = i % static_cast<size_t>(model_->get_max_seq_len());
+            size_t token_offset = token_id * d_model_;
+            size_t pos_offset = pos_idx * d_model_;
+            size_t out_offset = i * d_model_;
+            
+            for (int j = 0; j < d_model_; ++j) {
+                result_data[out_offset + j] = token_emb_data[token_offset + j] + 
+                                               pos_emb_data[pos_offset + j];
+            }
+        }
+    }
+    
+    return result;
 }
 
 void AutoregressiveTrainer::train_step(const std::vector<int>& input_ids, float learning_rate) {
@@ -436,26 +481,8 @@ std::vector<TrainingMetrics> AutoregressiveTrainer::train_batch_optimized(
         size_t seq_len = inputs.size();
         
         // === FORWARD PASS WITH CACHING ===
-        auto x = Math::MatrixFactory::create(seq_len, d_model_);
-        
-        // Embed tokens
-        const float* token_emb_data = model_->get_token_embedding()->data();
-        const float* pos_emb_data = model_->get_position_embedding()->data();
-        float* x_data = x->data();
-        
-        for (size_t i = 0; i < seq_len; ++i) {
-            int token_id = inputs[i];
-            if (token_id >= 0 && token_id < vocab_size_) {
-                size_t pos_idx = i % static_cast<size_t>(model_->get_max_seq_len());
-                size_t token_offset = token_id * d_model_;
-                size_t pos_offset = pos_idx * d_model_;
-                size_t out_offset = i * d_model_;
-                
-                for (int j = 0; j < d_model_; ++j) {
-                    x_data[out_offset + j] = token_emb_data[token_offset + j] + pos_emb_data[pos_offset + j];
-                }
-            }
-        }
+        // Use optimized GPU embedding when available
+        auto x = embed_sequence(inputs);
         
         // Pass through layers with caching
         auto mask = model_->create_causal_mask(seq_len);
