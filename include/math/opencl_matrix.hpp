@@ -93,6 +93,7 @@ private:
     static cl_program program_;
     static cl_kernel kernel_matmul_;
     static cl_kernel kernel_matmul_tiled_;
+    static cl_kernel kernel_embed_sequence_;  // GPU embedding lookup
     static cl_kernel kernel_add_;
     static cl_kernel kernel_multiply_scalar_;
     static cl_kernel kernel_hadamard_;
@@ -115,6 +116,14 @@ private:
     // Kernel compilation
     static void compile_kernels();
     static void check_error(cl_int err, const std::string& operation);
+    
+public:
+    // GPU-side embedding lookup (avoids CPU↔GPU transfer of embeddings)
+    static std::unique_ptr<OpenCLMatrix> embed_sequence_gpu(
+        const OpenCLMatrix& token_embedding,
+        const OpenCLMatrix& position_embedding,
+        const std::vector<int>& token_ids,
+        int max_seq_len);
 };
 
 } // namespace Math

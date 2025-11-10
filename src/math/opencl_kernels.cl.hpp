@@ -3,6 +3,32 @@
 
 const char* OPENCL_KERNELS = R"CL(
 
+// OPTIMIZATION: GPU-side embedding lookup kernel
+// Eliminates need to download embeddings to CPU
+// Input: token IDs (small upload), embeddings stay on GPU
+// Output: embedded sequences ready for transformer
+__kernel void embed_sequence(
+    __global const float* token_embedding,
+    __global const float* position_embedding,
+    __global const int* token_ids,
+    __global float* output,
+    int seq_len,
+    int d_model,
+    int max_seq_len)
+{
+    int i = get_global_id(0);  // Token position
+    int j = get_global_id(1);  // Embedding dimension
+    
+    if (i < seq_len && j < d_model) {
+        int token_id = token_ids[i];
+        int pos_idx = i % max_seq_len;
+        
+        // Combine token and position embeddings
+        output[i * d_model + j] = token_embedding[token_id * d_model + j] 
+                                + position_embedding[pos_idx * d_model + j];
+    }
+}
+
 // Matrix multiplication: C = A * B
 // A: M x K, B: K x N, C: M x N
 __kernel void matmul(
