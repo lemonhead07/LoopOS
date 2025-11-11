@@ -11,9 +11,9 @@ FineTuner::FineTuner(
     int d_model, int num_heads, int num_layers, int d_ff, int vocab_size, int num_classes)
     : num_classes_(num_classes) {
     
-    // Create base transformer model
+    // Create base transformer model (encoder-only)
     model_ = std::make_unique<Transformer::Transformer>(
-        d_model, num_heads, num_layers, 0, d_ff, vocab_size
+        d_model, num_heads, num_layers, d_ff, vocab_size
     );
     
     // Initialize classification head
@@ -39,17 +39,17 @@ void FineTuner::train_step(
         throw std::out_of_range("Label exceeds number of classes");
     }
     
-    // Forward pass
-    auto encoder_output = model_->forward(input_ids);
+    // Forward pass - get hidden states instead of logits
+    auto hidden_states = model_->get_hidden_states(input_ids);
     
-    // Pool encoder output (mean pooling)
-    auto pooled = Math::MatrixFactory::create(1, encoder_output->cols());
-    for (size_t j = 0; j < encoder_output->cols(); ++j) {
+    // Pool hidden states (mean pooling)
+    auto pooled = Math::MatrixFactory::create(1, hidden_states->cols());
+    for (size_t j = 0; j < hidden_states->cols(); ++j) {
         float sum = 0.0f;
-        for (size_t i = 0; i < encoder_output->rows(); ++i) {
-            sum += encoder_output->at(i, j);
+        for (size_t i = 0; i < hidden_states->rows(); ++i) {
+            sum += hidden_states->at(i, j);
         }
-        pooled->at(0, j) = sum / static_cast<float>(encoder_output->rows());
+        pooled->at(0, j) = sum / static_cast<float>(hidden_states->rows());
     }
     
     // Compute classification loss
@@ -71,17 +71,17 @@ int FineTuner::predict(const std::vector<int>& input_ids) {
         throw std::invalid_argument("Input sequence cannot be empty");
     }
     
-    // Forward pass
-    auto encoder_output = model_->forward(input_ids);
+    // Forward pass - get hidden states instead of logits
+    auto hidden_states = model_->get_hidden_states(input_ids);
     
-    // Pool encoder output (mean pooling)
-    auto pooled = Math::MatrixFactory::create(1, encoder_output->cols());
-    for (size_t j = 0; j < encoder_output->cols(); ++j) {
+    // Pool hidden states (mean pooling)
+    auto pooled = Math::MatrixFactory::create(1, hidden_states->cols());
+    for (size_t j = 0; j < hidden_states->cols(); ++j) {
         float sum = 0.0f;
-        for (size_t i = 0; i < encoder_output->rows(); ++i) {
-            sum += encoder_output->at(i, j);
+        for (size_t i = 0; i < hidden_states->rows(); ++i) {
+            sum += hidden_states->at(i, j);
         }
-        pooled->at(0, j) = sum / static_cast<float>(encoder_output->rows());
+        pooled->at(0, j) = sum / static_cast<float>(hidden_states->rows());
     }
     
     // Apply classification head
@@ -103,17 +103,17 @@ int FineTuner::predict(const std::vector<int>& input_ids) {
 float FineTuner::compute_classification_loss(const std::vector<int>& input_ids, int label) {
     // Cross-entropy loss for classification
     
-    // Forward pass
-    auto encoder_output = model_->forward(input_ids);
+    // Forward pass - get hidden states instead of logits
+    auto hidden_states = model_->get_hidden_states(input_ids);
     
-    // Pool encoder output (mean pooling)
-    auto pooled = Math::MatrixFactory::create(1, encoder_output->cols());
-    for (size_t j = 0; j < encoder_output->cols(); ++j) {
+    // Pool hidden states (mean pooling)
+    auto pooled = Math::MatrixFactory::create(1, hidden_states->cols());
+    for (size_t j = 0; j < hidden_states->cols(); ++j) {
         float sum = 0.0f;
-        for (size_t i = 0; i < encoder_output->rows(); ++i) {
-            sum += encoder_output->at(i, j);
+        for (size_t i = 0; i < hidden_states->rows(); ++i) {
+            sum += hidden_states->at(i, j);
         }
-        pooled->at(0, j) = sum / static_cast<float>(encoder_output->rows());
+        pooled->at(0, j) = sum / static_cast<float>(hidden_states->rows());
     }
     
     // Apply classification head
