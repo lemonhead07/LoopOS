@@ -77,6 +77,9 @@ ctest
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete architecture documentation for developers and LLMs
 - **[ADAPTIVE_LR_GUIDE.md](ADAPTIVE_LR_GUIDE.md)** - Adaptive learning rate implementation guide
 - **[docs/](docs/)** - Comprehensive documentation library
+  - [Post-Training Guide](docs/POST_TRAINING_GUIDE.md) - Fine-tuning, CoT, and RLHF methods
+  - [Post-Training Quickstart](docs/POST_TRAINING_QUICKSTART.md) - Get started with post-training in 5 minutes
+  - [Post-Training Data Formats](docs/POST_TRAINING_DATA_FORMATS.md) - Dataset format specifications
   - [CLI Examples](docs/CLI_EXAMPLES.md)
   - [Generation Workflow](docs/GENERATION_WORKFLOW.md)
   - [Chatbot Guide](docs/CHATBOT_QUICKSTART.md)
