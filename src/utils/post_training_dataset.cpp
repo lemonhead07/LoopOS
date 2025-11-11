@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <random>
 #include <stdexcept>
-#include <nlohmann/json.hpp>
+#include "external/json.hpp"
 
 namespace LoopOS {
 namespace Utils {

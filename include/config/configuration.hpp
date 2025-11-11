@@ -49,6 +49,7 @@ struct TrainingConfig {
     std::optional<int> prefetch_batches;        // Number of batches to prefetch (default: 3)
     std::optional<int> num_workers;             // Number of worker threads (default: 2)
     std::optional<bool> shuffle;                // Shuffle data each epoch (default: true)
+    std::optional<bool> random_offset;          // Start from random offset (fast for large files)
     std::optional<size_t> max_batches_per_epoch; // Limit batches per epoch (0 = unlimited)
     
     static TrainingConfig from_json(const json& j);

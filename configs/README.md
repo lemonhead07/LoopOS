@@ -28,7 +28,9 @@ Each JSON configuration file should follow this structure:
       "max_length": 128,               // (Optional) Truncate/segment length
       "prefetch_batches": 3,           // (Optional) Async prefetch depth for streaming loader
       "num_workers": 2,                // (Optional) File/tokenization worker threads
-      "shuffle": true,                 // (Optional) Shuffle dataset each epoch
+      "shuffle": false,                // (Optional) Shuffle dataset each epoch (slow for large files)
+      "random_offset": true,           // (Optional) Start from random point (fast for large files)
+      "max_batches_per_epoch": 1000,   // (Optional) Limit batches per epoch (use with random_offset)
       "num_epochs": 10                 // Number of epochs
       // Add method-specific parameters after the common ones
   },

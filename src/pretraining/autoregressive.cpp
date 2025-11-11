@@ -1083,8 +1083,8 @@ void AutoregressiveTrainer::train_epoch_streaming(Utils::StreamingDataLoader& da
             // Update progress display more frequently for better feedback
             size_t lines_processed = data_loader.get_lines_processed();
             
-            // Update every 100 sequences or when file changes
-            bool should_update = (sequences_processed - last_reported_sequences >= 100) ||
+            // Update every 10 sequences or when epoch completes (more responsive for small epochs)
+            bool should_update = (sequences_processed - last_reported_sequences >= 10) ||
                                 data_loader.is_epoch_complete();
             
             if (show_progress && should_update) {

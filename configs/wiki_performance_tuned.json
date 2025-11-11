@@ -14,11 +14,12 @@
   },
   "training": {
     "learning_rate": 0.0001,
-    "max_length": 96,
-    "batch_size": 16,
-    "prefetch_batches": 4,
-    "num_workers": 3,
-    "shuffle": true,
+    "max_length": 128,
+    "batch_size": 24,
+    "prefetch_batches": 2,
+    "num_workers": 1,
+    "shuffle": false,
+    "random_offset": true,
     "num_epochs": 1,
     "random_seed": 42
   },

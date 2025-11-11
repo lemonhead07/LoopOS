@@ -3,10 +3,6 @@
 #include "utils/tokenizer.hpp"
 #include <vector>
 #include <string>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <queue>
 #include <atomic>
 #include <memory>
 #include <filesystem>
@@ -21,8 +17,7 @@ namespace Utils {
  * 
  * Key features:
  * - Streams data from disk instead of loading all into RAM
- * - Multi-threaded file reading and tokenization
- * - Prefetch queue to overlap I/O with computation
+ * - Sequential loading with minimal overhead (no queue, no threads)
  * - Memory-efficient for large datasets (Wikipedia, etc.)
  * - Configurable chunk size to control memory usage
  */
@@ -32,10 +27,11 @@ public:
 
     struct Config {
         size_t batch_size = 32;
-        size_t prefetch_batches = 2;   // Number of batches to keep queued
-        size_t num_workers = 1;         // Retained for compatibility (ignored beyond 1)
-        bool shuffle = false;           // No-op in single-file mode, retained for schema stability
-        size_t queue_capacity = 4;      // Maximum number of batches in queue
+        size_t prefetch_batches = 2;   // Retained for compatibility (unused)
+        size_t num_workers = 1;         // Retained for compatibility (unused)
+        bool shuffle = false;           // Shuffle line order (slow for large files)
+        bool random_offset = false;     // Start from random point (fast for large files)
+        size_t queue_capacity = 4;      // Retained for compatibility (unused)
         size_t max_sequences_in_memory = 10000;  // Retained for compatibility (unused)
         int max_length = 256;           // Max sequence length (for chunking)
         size_t max_batches_per_epoch = 0;  // Limit batches per epoch (0 = unlimited)
@@ -58,17 +54,13 @@ public:
     bool is_epoch_complete() const;
     void stop();
 
-    size_t get_sequences_processed() const { return sequences_processed_.load(); }
-    size_t get_lines_processed() const { return lines_processed_.load(); }
+    size_t get_sequences_processed() const { return sequences_processed_; }
+    size_t get_lines_processed() const { return lines_processed_; }
     size_t get_total_bytes() const { return total_bytes_; }
-    size_t get_bytes_read() const { return bytes_read_.load(); }
+    size_t get_bytes_read() const { return bytes_read_; }
 
 private:
-    void reader_thread();
-    void enqueue_batch(BatchType&& batch);
-    void finalize_pending_batch();
-    void clear_status_line();
-    void report_prefetch_status(size_t queue_size);
+    BatchType read_next_batch();
     void build_line_index();
     void shuffle_line_order();
 
@@ -78,9 +70,10 @@ private:
 
     std::ifstream corpus_stream_;
     size_t total_bytes_;
-    std::atomic<size_t> bytes_read_;
-    std::atomic<size_t> sequences_processed_;
-    std::atomic<size_t> lines_processed_;
+    size_t bytes_read_;
+    size_t sequences_processed_;
+    size_t lines_processed_;
+    size_t random_start_offset_;
     
     // Line shuffling support
     std::vector<std::streampos> line_offsets_;
@@ -88,22 +81,10 @@ private:
     bool line_index_built_;
     size_t current_line_idx_;
     unsigned int shuffle_seed_;
-    std::atomic<size_t> batches_produced_this_epoch_;
+    size_t batches_produced_this_epoch_;
 
-    std::thread reader_thread_;
-    std::atomic<bool> stop_requested_;
-    std::atomic<bool> epoch_active_;
-    std::atomic<bool> reader_finished_;
-
-    std::queue<BatchType> batch_queue_;
-    std::mutex queue_mutex_;
-    std::condition_variable queue_cv_;
-
-    BatchType pending_batch_;
-
-    std::mutex status_mutex_;
-    std::chrono::steady_clock::time_point last_prefetch_status_time_;
-    bool prefetch_status_visible_;
+    bool epoch_active_;
+    bool epoch_complete_;
 };
 
 } // namespace Utils

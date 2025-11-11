@@ -2,10 +2,6 @@
 
 #include <vector>
 #include <string>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
-#include <queue>
 #include <atomic>
 #include <memory>
 #include <functional>
@@ -14,13 +10,13 @@ namespace LoopOS {
 namespace Utils {
 
 /**
- * Asynchronous data loader with prefetching for efficient training
+ * Sequential data loader for efficient training
  * 
  * Key features:
- * - Multi-threaded batch preparation
- * - Prefetch queue to overlap I/O with computation
- * - Configurable worker threads
+ * - Simple sequential batch preparation
+ * - No threading overhead
  * - Automatic batch shuffling
+ * - Minimal memory overhead
  */
 class DataLoader {
 public:
@@ -28,10 +24,10 @@ public:
     
     struct Config {
         size_t batch_size = 32;
-        size_t prefetch_batches = 2;  // Number of batches to prefetch
-        size_t num_workers = 2;        // Number of worker threads
+        size_t prefetch_batches = 2;  // Retained for compatibility (unused)
+        size_t num_workers = 2;        // Retained for compatibility (unused)
         bool shuffle = true;           // Shuffle data each epoch
-        size_t queue_capacity = 4;     // Max batches in queue
+        size_t queue_capacity = 4;     // Retained for compatibility (unused)
     };
     
     /**
@@ -42,7 +38,7 @@ public:
     DataLoader(const std::vector<std::vector<int>>& dataset, const Config& config);
     
     /**
-     * Destructor - stops worker threads
+     * Destructor
      */
     ~DataLoader();
     
@@ -53,7 +49,7 @@ public:
     void start_epoch();
     
     /**
-     * Get the next batch (blocks if not ready)
+     * Get the next batch
      * @return Next batch, or empty if epoch complete
      */
     BatchType get_next_batch();
@@ -74,36 +70,20 @@ public:
     size_t get_current_batch() const;
     
     /**
-     * Stop the data loader (stops worker threads)
+     * Stop the data loader
      */
     void stop();
     
 private:
-    void worker_thread();
-    void prepare_batch(size_t start_idx);
-    
     const std::vector<std::vector<int>>& dataset_;
     Config config_;
     
     std::vector<size_t> indices_;  // Shuffled indices
     size_t current_index_;
     size_t num_batches_;
-    std::atomic<size_t> batches_loaded_;
+    size_t batches_loaded_;
     
-    // Thread management
-    std::vector<std::thread> workers_;
-    std::atomic<bool> stop_requested_;
-    std::atomic<bool> epoch_active_;
-    
-    // Prefetch queue
-    std::queue<BatchType> batch_queue_;
-    std::mutex queue_mutex_;
-    std::condition_variable queue_cv_;
-    std::condition_variable worker_cv_;
-    
-    // Work queue
-    std::queue<size_t> work_queue_;
-    std::mutex work_mutex_;
+    bool epoch_active_;
 };
 
 } // namespace Utils

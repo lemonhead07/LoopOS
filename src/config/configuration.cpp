@@ -57,6 +57,7 @@ TrainingConfig TrainingConfig::from_json(const json& j) {
     config.prefetch_batches = get_optional<int>(j, "prefetch_batches");
     config.num_workers = get_optional<int>(j, "num_workers");
     config.shuffle = get_optional<bool>(j, "shuffle");
+    config.random_offset = get_optional<bool>(j, "random_offset");
     config.max_batches_per_epoch = get_optional<size_t>(j, "max_batches_per_epoch");
     
     return config;

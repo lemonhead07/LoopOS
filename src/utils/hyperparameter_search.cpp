@@ -1,6 +1,6 @@
 #include "utils/hyperparameter_search.hpp"
 #include "utils/logger.hpp"
-#include <nlohmann/json.hpp>
+#include "external/json.hpp"
 #include <fstream>
 #include <random>
 #include <cmath>

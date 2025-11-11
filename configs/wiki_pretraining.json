@@ -18,7 +18,8 @@
     "batch_size": 8,
     "prefetch_batches": 1,
     "num_workers": 1,
-    "shuffle": true,
+    "shuffle": false,
+    "random_offset": true,
     "num_epochs": 20,
     "random_seed": 42,
     "max_batches_per_epoch": 10
@@ -29,7 +30,8 @@
     "tokenizer_vocab": "outputs/tokenizer_wiki.vocab",
     "max_files": 0,
     "file_pattern": "**/*",
-    "shuffle": true,
+    "shuffle": false,
+    "random_offset": true,
     "validation_split": 0.05
   },
   "generation": {
