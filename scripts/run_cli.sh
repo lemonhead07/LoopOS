@@ -68,6 +68,10 @@ ${YELLOW}TRAINING EXAMPLES:${NC}
   $0 train-vocab --data data/pretraining/text/trump_3.6.quarter.txt --epochs 3
   $0 train-vocab --data data/pretraining/wiki/fullEnglish/AA/ --vocab-size 50000
 
+  ${GREEN}# Resume Training from Checkpoint${NC}
+  $0 resume outputs/autoregressive/model_checkpoint.bin --data data/pretraining/text/trump_3.6.quarter.txt --epochs 5
+  $0 train-vocab --resume outputs/autoregressive/model_checkpoint.bin --data data/text.txt --learning-rate 0.00005
+
   ${GREEN}# Build Tokenizer Vocabulary${NC}
   $0 build-tokenizer --data data/pretraining/wiki/fullEnglish/ --vocab outputs/tokenizer_wiki.vocab --vocab-size 50000
   $0 build-tokenizer --data data/pretraining/text/trump_3.6.txt --vocab-size 10000
@@ -212,6 +216,32 @@ do_train_vocab() {
     
     # Pass all arguments directly to train_vocab executable
     ./$BUILD_DIR/train_vocab "$@"
+}
+
+# Resume training from checkpoint
+do_resume_training() {
+    ensure_build
+    
+    local checkpoint="$1"
+    shift
+    
+    if [ -z "$checkpoint" ]; then
+        print_error "Checkpoint file required for resume"
+        echo "Usage: $0 resume <checkpoint.bin> --data <file> [options]"
+        exit 1
+    fi
+    
+    if [ ! -f "$checkpoint" ]; then
+        print_error "Checkpoint file not found: $checkpoint"
+        exit 1
+    fi
+    
+    print_header "Resume Training from Checkpoint"
+    print_info "Checkpoint: $checkpoint"
+    print_info "Using build: $BUILD_DIR"
+    echo ""
+    
+    ./$BUILD_DIR/train_vocab --resume "$checkpoint" "$@"
 }
 
 # Build tokenizer vocabulary (without training)
@@ -559,6 +589,9 @@ main() {
             ;;
         train-vocab|vocab-train)
             do_train_vocab "$@"
+            ;;
+        resume|continue)
+            do_resume_training "$@"
             ;;
         build-tokenizer|tokenizer-build)
             do_build_tokenizer "$@"
