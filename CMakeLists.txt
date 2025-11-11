@@ -77,6 +77,7 @@ add_library(utils STATIC
     src/utils/model_loader.cpp
     src/utils/data_loader.cpp
     src/utils/streaming_data_loader.cpp
+    src/utils/streaming_loader_autotune.cpp
     src/utils/lr_scheduler.cpp
 )
 
@@ -143,7 +144,7 @@ target_link_libraries(config utils)
 add_library(executor STATIC
     src/executor/computation_executor.cpp
 )
-target_link_libraries(executor config pretraining posttraining transformer utils)
+target_link_libraries(executor config pretraining posttraining transformer hardware_detection utils)
 
 # Chat Library
 add_library(chat STATIC

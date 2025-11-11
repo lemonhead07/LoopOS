@@ -1097,31 +1097,38 @@ void AutoregressiveTrainer::train_epoch_streaming(Utils::StreamingDataLoader& da
                 int mins = static_cast<int>(elapsed_sec / 60);
                 int secs = static_cast<int>(elapsed_sec) % 60;
                 
-                // Get current file info
-                size_t current_file = data_loader.get_current_file_index();
-                size_t total_files = data_loader.get_num_files();
-                
+                // Get corpus progress information
+                size_t bytes_read = data_loader.get_bytes_read();
+                size_t total_bytes = data_loader.get_total_bytes();
+
+                double corpus_pct = 0.0;
+                if (total_bytes > 0) {
+                    corpus_pct = (static_cast<double>(bytes_read) / static_cast<double>(total_bytes)) * 100.0;
+                }
+
                 // Use stderr to avoid mixing with log output
                 std::cerr << "\r\033[K";  // Carriage return + clear line
-                
-                // Calculate file progress percentage
-                float file_progress = total_files > 0 ? (static_cast<float>(current_file) / total_files) * 100.0f : 0.0f;
-                
-                // Build progress bar for files
+
+                // Build progress bar for corpus consumption
                 size_t bar_width = 30;
-                size_t filled = static_cast<size_t>(bar_width * file_progress / 100.0f);
-                
+                size_t filled = static_cast<size_t>(bar_width * corpus_pct / 100.0);
+
                 std::cerr << "[";
                 for (size_t i = 0; i < bar_width; ++i) {
-                    if (i < filled) std::cerr << "█";
-                    else if (i == filled) std::cerr << "▓";
-                    else std::cerr << "░";
+                    if (i < filled) std::cerr << "=";
+                    else if (i == filled) std::cerr << ">";
+                    else std::cerr << " ";
                 }
                 std::cerr << "] ";
-                
-                // File progress
-                std::cerr << std::fixed << std::setprecision(1) << file_progress << "% ";
-                std::cerr << "(" << current_file << "/" << total_files << " files)";
+
+                std::cerr << std::fixed << std::setprecision(1) << corpus_pct << "%";
+                if (total_bytes > 0) {
+                    double read_mb = static_cast<double>(bytes_read) / (1024.0 * 1024.0);
+                    double total_mb = static_cast<double>(total_bytes) / (1024.0 * 1024.0);
+                    std::cerr << " (" << std::setprecision(2) << read_mb << "/" << total_mb << " MB)";
+                } else {
+                    std::cerr << " (unknown corpus size)";
+                }
                 
                 // Sequence and line counts
                 std::cerr << " | " << sequences_processed << " seq";

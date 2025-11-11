@@ -14,7 +14,10 @@
   "training": {
     "learning_rate": 0.0001,
     "max_length": 128,
-    "batch_size": 32,
+    "batch_size": 20,
+    "prefetch_batches": 2,
+    "num_workers": 2,
+    "shuffle": true,
     "num_epochs": 1
   },
   "data": {

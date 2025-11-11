@@ -4,6 +4,7 @@
 #include <cctype>
 #include <map>
 #include <iostream>
+#include <iomanip>
 #include <chrono>
 #include <filesystem>
 
@@ -130,8 +131,25 @@ void Tokenizer::build_vocabulary_from_files(const std::vector<std::string>& corp
     size_t total_files = corpus_files.size();
     size_t files_processed = 0;
     auto last_log_time = std::chrono::steady_clock::now();
+    auto start_time = std::chrono::steady_clock::now();
+    
+    // For ETA calculation
+    size_t total_file_size = 0;
+    size_t processed_bytes = 0;
+    
+    // Get total size of all files for ETA
+    for (const auto& corpus_file : corpus_files) {
+        try {
+            total_file_size += std::filesystem::file_size(corpus_file);
+        } catch (...) {
+            // Ignore errors
+        }
+    }
+    
+    std::cerr << "\nProcessing corpus (total size: " << (total_file_size / 1024 / 1024) << " MB):\n";
     
     for (const auto& corpus_file : corpus_files) {
+        std::cerr << "\nOpening file: " << corpus_file << std::endl;
         std::ifstream file(corpus_file);
         if (!file.is_open()) {
             Logger::instance().error("Tokenizer", "Failed to open corpus file: " + corpus_file);
@@ -139,9 +157,16 @@ void Tokenizer::build_vocabulary_from_files(const std::vector<std::string>& corp
             continue;
         }
         
+        std::cerr << "File opened successfully, starting to read..." << std::endl;
+        
         std::string line;
         size_t lines_in_file = 0;
         while (std::getline(file, line)) {
+            // First line debug
+            if (lines_in_file == 0) {
+                std::cerr << "Read first line (" << line.length() << " chars)" << std::endl;
+            }
+            
             auto words = tokenize_text(line);
             for (const auto& word : words) {
                 if (!word.empty()) {
@@ -150,23 +175,80 @@ void Tokenizer::build_vocabulary_from_files(const std::vector<std::string>& corp
                 }
             }
             lines_in_file++;
+            processed_bytes += line.length() + 1; // +1 for newline
+            
+            // Show progress every 5000 lines or every 5 seconds for single-file processing
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed_since_log = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_time).count();
+            
+            if (total_files == 1 && (lines_in_file % 5000 == 0 || elapsed_since_log >= 5000)) {
+                auto elapsed_total = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+                
+                // Calculate ETA
+                double progress_ratio = total_file_size > 0 ? (double)processed_bytes / total_file_size : 0.0;
+                int eta_seconds = 0;
+                if (progress_ratio > 0.001 && elapsed_total > 0) {
+                    double total_time_estimate = elapsed_total / progress_ratio;
+                    eta_seconds = static_cast<int>(total_time_estimate - elapsed_total);
+                }
+                
+                int eta_hours = eta_seconds / 3600;
+                int eta_mins = (eta_seconds % 3600) / 60;
+                int eta_secs = eta_seconds % 60;
+                
+                // Calculate throughput
+                double mb_per_sec = elapsed_total > 0 ? (processed_bytes / 1024.0 / 1024.0) / elapsed_total : 0.0;
+                
+                std::cerr << "\r[Processing] " << lines_in_file << " lines | "
+                          << total_tokens_processed_ << " tokens | "
+                          << word_freq.size() << " unique words | "
+                          << static_cast<int>(progress_ratio * 100) << "% | "
+                          << elapsed_total << "s elapsed | "
+                          << std::fixed << std::setprecision(2) << mb_per_sec << " MB/s";
+                
+                if (eta_seconds > 0 && progress_ratio > 0.01) {
+                    std::cerr << " | ETA: ";
+                    if (eta_hours > 0) std::cerr << eta_hours << "h ";
+                    if (eta_mins > 0 || eta_hours > 0) std::cerr << eta_mins << "m ";
+                    std::cerr << eta_secs << "s";
+                }
+                
+                std::cerr << "   ";
+                std::cerr.flush();
+                last_log_time = now;
+            }
         }
+        
+        std::cerr << "\nFinished reading file. Total lines: " << lines_in_file << std::endl;
         file.close();
         files_processed++;
         
-        // Log progress every 100 files or 5 seconds
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_log_time).count();
-        if (files_processed % 100 == 0 || elapsed >= 5) {
-            float progress = (float)files_processed / total_files * 100.0f;
-            Logger::instance().info("Tokenizer", 
-                "Progress: " + std::to_string(files_processed) + "/" + std::to_string(total_files) + 
-                " files (" + std::to_string((int)progress) + "%) - " +
-                std::to_string(total_tokens_processed_) + " tokens, " +
-                std::to_string(word_freq.size()) + " unique words");
-            last_log_time = now;
+        // Show final progress for multi-file processing
+        if (total_files > 1) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_log_time).count();
+            if (files_processed % 1 == 0 || elapsed >= 5) {
+                float progress = (float)files_processed / total_files;
+                int bar_width = 50;
+                int filled = static_cast<int>(bar_width * progress);
+                
+                std::cerr << "\r[";
+                for (int i = 0; i < bar_width; ++i) {
+                    if (i < filled) std::cerr << "=";
+                    else if (i == filled) std::cerr << ">";
+                    else std::cerr << " ";
+                }
+                std::cerr << "] " << files_processed << "/" << total_files 
+                          << " (" << static_cast<int>(progress * 100) << "%) | "
+                          << total_tokens_processed_ << " tokens | "
+                          << word_freq.size() << " unique words";
+                std::cerr.flush();
+                last_log_time = now;
+            }
         }
     }
+    
+    std::cerr << "\n";
     
     Logger::instance().info("Tokenizer", "Processed " + std::to_string(total_tokens_processed_) + " tokens");
     Logger::instance().info("Tokenizer", "Found " + std::to_string(word_freq.size()) + " unique words");

@@ -15,12 +15,15 @@
   "training": {
     "learning_rate": 0.0001,
     "max_length": 96,
-    "batch_size": 40,
+    "batch_size": 16,
+    "prefetch_batches": 4,
+    "num_workers": 3,
+    "shuffle": true,
     "num_epochs": 1,
     "random_seed": 42
   },
   "data": {
-    "input_file": "data/pretraining/wiki/fullEnglish/",
+    "input_file": "data/pretraining/wiki/wiki_performance_corpus.txt",
     "output_dir": "outputs/wiki_performance_tuned",
     "tokenizer_vocab": "outputs/tokenizer_wiki.vocab",
     "max_files": 100,

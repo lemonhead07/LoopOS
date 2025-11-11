@@ -44,6 +44,20 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 ./build/lr_scheduler_demo
 ```
 
+### Prepare Wikipedia Corpora (optional)
+
+The streaming loader now expects flattened corpus files instead of directory shards. Use the helper script to build them:
+
+```bash
+# Full corpus
+./scripts/flatten_wiki_corpus.sh data/pretraining/wiki/fullEnglish data/pretraining/wiki/wiki_corpus.txt
+
+# Lightweight subset (first 100 shards)
+./scripts/flatten_wiki_corpus.sh data/pretraining/wiki/fullEnglish data/pretraining/wiki/wiki_subset_corpus.txt 100
+```
+
+Point `data.input_file` in your JSON configuration to the generated file.
+
 ### Test
 
 ```bash

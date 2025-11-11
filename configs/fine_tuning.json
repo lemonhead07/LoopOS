@@ -15,7 +15,10 @@
   },
   "training": {
     "learning_rate": 0.00001,
-    "batch_size": 32,
+    "batch_size": 16,
+    "prefetch_batches": 2,
+    "num_workers": 2,
+    "shuffle": true,
     "num_epochs": 5
   },
   "data": {

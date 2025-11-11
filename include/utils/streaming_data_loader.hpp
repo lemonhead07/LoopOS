@@ -10,6 +10,8 @@
 #include <atomic>
 #include <memory>
 #include <filesystem>
+#include <chrono>
+#include <fstream>
 
 namespace LoopOS {
 namespace Utils {
@@ -27,111 +29,70 @@ namespace Utils {
 class StreamingDataLoader {
 public:
     using BatchType = std::vector<std::vector<int>>;
-    
+
     struct Config {
         size_t batch_size = 32;
-        size_t prefetch_batches = 2;   // Number of batches to prefetch
-        size_t num_workers = 2;         // Number of worker threads for file reading
-        bool shuffle = true;            // Shuffle file order each epoch
-        size_t queue_capacity = 4;      // Max batches in queue
-        size_t max_sequences_in_memory = 10000;  // Max sequences to hold in memory at once
+        size_t prefetch_batches = 2;   // Number of batches to keep queued
+        size_t num_workers = 1;         // Retained for compatibility (ignored beyond 1)
+        bool shuffle = false;           // No-op in single-file mode, retained for schema stability
+        size_t queue_capacity = 4;      // Maximum number of batches in queue
+        size_t max_sequences_in_memory = 10000;  // Retained for compatibility (unused)
         int max_length = 256;           // Max sequence length (for chunking)
     };
-    
+
     /**
-     * Create a streaming data loader for files in a directory
-     * @param directory Directory containing data files
-     * @param tokenizer Tokenizer to use for encoding text
+     * Create a streaming data loader over a single corpus file.
+     * @param corpus_file Concatenated text corpus
+     * @param tokenizer Tokenizer used to encode each line
      * @param config Data loader configuration
      */
-    StreamingDataLoader(const std::string& directory, 
-                       ::Utils::Tokenizer& tokenizer,
-                       const Config& config);
-    
-    /**
-     * Destructor - stops worker threads
-     */
+    StreamingDataLoader(const std::string& corpus_file,
+                        ::Utils::Tokenizer& tokenizer,
+                        const Config& config);
+
     ~StreamingDataLoader();
-    
-    /**
-     * Start loading an epoch
-     * Resets position and optionally shuffles file order
-     */
+
     void start_epoch();
-    
-    /**
-     * Get the next batch (blocks if not ready)
-     * @return Next batch, or empty if epoch complete
-     */
     BatchType get_next_batch();
-    
-    /**
-     * Check if epoch is complete
-     */
     bool is_epoch_complete() const;
-    
-    /**
-     * Get total number of files to process
-     */
-    size_t get_num_files() const { return files_.size(); }
-    
-    /**
-     * Get current file index
-     */
-    size_t get_current_file_index() const { return current_file_index_; }
-    
-    /**
-     * Get total sequences processed so far
-     */
-    size_t get_sequences_processed() const { return sequences_processed_; }
-    
-    /**
-     * Get total lines processed so far
-     */
-    size_t get_lines_processed() const { return lines_processed_; }
-    
-    /**
-     * Stop the data loader (stops worker threads)
-     */
     void stop();
-    
+
+    size_t get_sequences_processed() const { return sequences_processed_.load(); }
+    size_t get_lines_processed() const { return lines_processed_.load(); }
+    size_t get_total_bytes() const { return total_bytes_; }
+    size_t get_bytes_read() const { return bytes_read_.load(); }
+
 private:
-    void worker_thread();
-    void batch_preparation_thread();
-    void load_sequences_from_file(const std::string& filepath);
-    void prepare_batch();
-    
-    std::string directory_;
+    void reader_thread();
+    void enqueue_batch(BatchType&& batch);
+    void finalize_pending_batch();
+    void clear_status_line();
+    void report_prefetch_status(size_t queue_size);
+
+    std::string corpus_path_;
     ::Utils::Tokenizer& tokenizer_;
     Config config_;
-    
-    std::vector<std::string> files_;
-    std::vector<size_t> file_indices_;  // Shuffled file indices
-    std::atomic<size_t> current_file_index_;
+
+    std::ifstream corpus_stream_;
+    size_t total_bytes_;
+    std::atomic<size_t> bytes_read_;
     std::atomic<size_t> sequences_processed_;
     std::atomic<size_t> lines_processed_;
-    
-    // Sequence buffer (limited size to control memory)
-    std::vector<std::vector<int>> sequence_buffer_;
-    std::mutex buffer_mutex_;
-    std::condition_variable buffer_cv_;
-    size_t buffer_read_pos_;
-    std::atomic<bool> buffer_exhausted_;
-    
-    // Thread management
-    std::vector<std::thread> workers_;
+
+    std::thread reader_thread_;
     std::atomic<bool> stop_requested_;
     std::atomic<bool> epoch_active_;
-    
-    // Prefetch queue
+    std::atomic<bool> reader_finished_;
+
     std::queue<BatchType> batch_queue_;
     std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
-    
-    // Work queue for file loading
-    std::queue<std::string> work_queue_;
-    std::mutex work_mutex_;
-    std::condition_variable worker_cv_;
+
+    BatchType pending_batch_;
+
+    std::mutex status_mutex_;
+    std::chrono::steady_clock::time_point last_prefetch_status_time_;
+    bool prefetch_status_visible_;
 };
 
 } // namespace Utils

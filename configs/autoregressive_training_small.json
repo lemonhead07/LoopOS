@@ -21,6 +21,10 @@
       "T_mult": 1.5
     },
     "max_length": 128,
+    "batch_size": 12,
+    "prefetch_batches": 3,
+    "num_workers": 2,
+    "shuffle": true,
     "num_epochs": 20,
     "regularization": {
       "dropout": 0.1,

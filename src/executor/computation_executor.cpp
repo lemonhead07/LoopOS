@@ -9,6 +9,9 @@
 #include "utils/profiler.hpp"
 #include "utils/system_info.hpp"
 #include "utils/streaming_data_loader.hpp"
+#include "utils/streaming_loader_autotune.hpp"
+#include "hardware/cpu_detector.hpp"
+#include "hardware/memory_detector.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
@@ -17,6 +20,7 @@
 #include <algorithm>
 #include <random>
 #include <filesystem>
+#include <utility>
 #include <omp.h>
 
 namespace LoopOS {
@@ -183,82 +187,78 @@ void ComputationExecutor::run_autoregressive() {
     
     if (data_config.input_file.has_value()) {
         std::string input_path = data_config.input_file.value();
-        
-        // Check if input is a directory or a file
-        if (std::filesystem::is_directory(input_path)) {
-            logger_.info("Input is a directory, using StreamingDataLoader (memory-efficient)...");
-            
-            // Use streaming data loader for directories
-            Utils::StreamingDataLoader::Config loader_config;
-            loader_config.batch_size = training_config.batch_size;
-            loader_config.prefetch_batches = training_config.prefetch_batches.value_or(4);  // Increased from 2
-            loader_config.num_workers = training_config.num_workers.value_or(4);  // Increased from 2 to match CPU cores
-            loader_config.shuffle = training_config.shuffle.value_or(true);
-            loader_config.queue_capacity = 32;  // Increased from 4 to allow more prefetching
-            loader_config.max_sequences_in_memory = 50000;  // Increased from 10K to ~400MB RAM usage
-            loader_config.max_length = training_config.max_length.value_or(256);
-            
-            Utils::StreamingDataLoader streaming_loader(input_path, tokenizer, loader_config);
-            
-            logger_.info("Using StreamingDataLoader with " + 
-                        std::to_string(loader_config.num_workers) + " workers, " +
-                        std::to_string(loader_config.max_sequences_in_memory) + " max sequences in memory");
-            logger_.info("");
-            logger_.info("Starting training...");
-            logger_.info("");
-            
-            // Train with streaming data loader
-            trainer.train_epoch_streaming(streaming_loader, 
-                                        training_config.learning_rate,
-                                        training_config.num_epochs,
-                                        true);
-        } else {
-            // For single files, use traditional approach
-            logger_.info("Input is a file, loading into memory...");
-            std::vector<std::vector<int>> sequences;
-            sequences = tokenize_file_with_vocab(input_path, tokenizer);
-        
-            // Chunk long sequences to max_length if specified
-            if (training_config.max_length.has_value()) {
-                int max_len = training_config.max_length.value();
-                std::vector<std::vector<int>> chunked_sequences;
-                size_t total_chunks = 0;
-                
-                for (const auto& seq : sequences) {
-                    if (seq.size() <= static_cast<size_t>(max_len)) {
-                        chunked_sequences.push_back(seq);
-                    } else {
-                        // Split into chunks
-                        for (size_t i = 0; i < seq.size(); i += max_len) {
-                            size_t chunk_size = std::min(static_cast<size_t>(max_len), seq.size() - i);
-                            std::vector<int> chunk(seq.begin() + i, seq.begin() + i + chunk_size);
-                            chunked_sequences.push_back(chunk);
-                            total_chunks++;
-                        }
-                    }
-                }
-                
-                if (total_chunks > 0) {
-                    logger_.info("Chunked " + std::to_string(total_chunks) + " long sequences into max_length=" + std::to_string(max_len));
-                    logger_.info("Total sequences after chunking: " + std::to_string(chunked_sequences.size()));
-                }
-                
-                sequences = chunked_sequences;
-            }
-            
-            logger_.info("Loaded " + std::to_string(sequences.size()) + " training sequences");
-            logger_.info("Starting training...");
-            logger_.info("");
-            
-            // Use configured data loader parameters if provided, otherwise use defaults
-            int prefetch_batches = training_config.prefetch_batches.value_or(3);
-            int num_workers = training_config.num_workers.value_or(2);
-            bool shuffle = training_config.shuffle.value_or(true);
-            
-            trainer.train_epoch(sequences, training_config.learning_rate, 
-                            training_config.num_epochs, true,
-                            prefetch_batches, num_workers, shuffle);
+
+        if (!std::filesystem::exists(input_path)) {
+            throw std::runtime_error("Input corpus not found: " + input_path);
         }
+
+        if (std::filesystem::is_directory(input_path)) {
+            throw std::runtime_error("Directory-based corpora are no longer supported. "
+                                     "Flatten the dataset into a single text file using scripts/flatten_wiki_corpus.sh.");
+        }
+
+        logger_.info("Input is a flattened corpus file. Streaming via OS page cache...");
+
+        Utils::StreamingDataLoader::Config loader_config;
+        loader_config.batch_size = training_config.batch_size;
+        loader_config.prefetch_batches = training_config.prefetch_batches.value_or(3);
+        loader_config.num_workers = training_config.num_workers.value_or(1);
+        loader_config.shuffle = false;
+        loader_config.queue_capacity = std::max<size_t>(loader_config.prefetch_batches * 2, loader_config.prefetch_batches + 1);
+        loader_config.max_sequences_in_memory = loader_config.batch_size * loader_config.prefetch_batches;
+        loader_config.max_length = training_config.max_length.value_or(256);
+
+        const bool workers_overridden = training_config.num_workers.has_value();
+        const bool prefetch_overridden = training_config.prefetch_batches.has_value();
+
+        Hardware::CPUDetector cpu_detector;
+        Hardware::MemoryDetector memory_detector;
+        const auto cpu_info = cpu_detector.detect();
+        const auto memory_info = memory_detector.detect();
+
+        const bool likely_laptop = (cpu_info.threads > 0 && cpu_info.threads <= 12) ||
+                                    (cpu_info.threads == 0 && cpu_info.cores <= 6) ||
+                                    (memory_info.total_mb > 0 && memory_info.total_mb <= 32768);
+
+        bool autotune_applied = false;
+
+        if (likely_laptop) {
+            Utils::StreamingAutotuneOptions autotune_options;
+            autotune_options.allow_worker_override = !workers_overridden;
+            autotune_options.allow_prefetch_override = !prefetch_overridden;
+            autotune_options.allow_queue_override = !prefetch_overridden;
+            autotune_options.allow_memory_override = false;
+
+            Utils::StreamingDataLoader::Config tuned_config =
+                Utils::autotune_streaming_loader_for_laptop(
+                    loader_config, cpu_info, memory_info, autotune_options);
+
+            if (tuned_config.num_workers != loader_config.num_workers ||
+                tuned_config.prefetch_batches != loader_config.prefetch_batches ||
+                tuned_config.queue_capacity != loader_config.queue_capacity) {
+                autotune_applied = true;
+            }
+
+            loader_config = std::move(tuned_config);
+        }
+
+        Utils::StreamingDataLoader streaming_loader(input_path, tokenizer, loader_config);
+
+        std::ostringstream loader_summary;
+        loader_summary << (autotune_applied ? "StreamingDataLoader tuned for laptop" : "StreamingDataLoader configuration")
+                       << " | prefetch=" << loader_config.prefetch_batches
+                       << " | queue=" << loader_config.queue_capacity
+                       << " | batch=" << loader_config.batch_size
+                       << " | available_mem_mb=" << memory_info.available_mb;
+        logger_.info(loader_summary.str());
+        logger_.info("");
+        logger_.info("Starting training...");
+        logger_.info("");
+
+        trainer.train_epoch_streaming(streaming_loader,
+                                      training_config.learning_rate,
+                                      training_config.num_epochs,
+                                      true);
     } else {
         logger_.warning("No input file specified, using dummy data");
         std::vector<std::vector<int>> sequences;
