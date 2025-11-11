@@ -665,6 +665,9 @@ void ComputationExecutor::run_fine_tuning() {
     logger_.info("Starting fine-tuning...");
     logger_.info("");
     
+    // Silence DEBUG logs during training to preserve progress bar
+    Utils::Logger::instance().set_min_level(Utils::LogLevel::INFO);
+    
     for (int epoch = 0; epoch < training_config.num_epochs; ++epoch) {
         logger_.info("Epoch " + std::to_string(epoch + 1) + "/" + 
                      std::to_string(training_config.num_epochs));
@@ -687,6 +690,19 @@ void ComputationExecutor::run_fine_tuning() {
         std::cout << std::endl;
         logger_.info("  Average Loss: " + std::to_string(avg_loss));
         logger_.info("");
+    }
+    
+    // Re-enable DEBUG logs
+    Utils::Logger::instance().set_min_level(Utils::LogLevel::DEBUG);
+    
+    // Save the fine-tuned model
+    if (data_config.output_dir.has_value()) {
+        std::string output_dir = data_config.output_dir.value();
+        std::string checkpoint_path = output_dir + "/fine_tuned_model.bin";
+        
+        logger_.info("Saving fine-tuned model to: " + checkpoint_path);
+        trainer.save_checkpoint(checkpoint_path);
+        logger_.info("Model saved successfully!");
     }
     
     logger_.info("Fine-tuning completed!");
