@@ -43,6 +43,7 @@ ${CYAN}LoopOS CLI - Enhanced Runner${NC}
 
 ${YELLOW}USAGE:${NC}
   Training:         $0 train <config_file.json>
+  Post-Training:    $0 post-train <fine-tuning|cot|rlhf> [options]
   Vocab Training:   $0 train-vocab --data <file|directory> [options]
   Build Tokenizer:  $0 build-tokenizer --data <file|directory> [options]
   Generation:       $0 generate [checkpoint.bin] [options]
@@ -75,6 +76,19 @@ ${YELLOW}TRAINING EXAMPLES:${NC}
   ${GREEN}# Build Tokenizer Vocabulary${NC}
   $0 build-tokenizer --data data/pretraining/wiki/fullEnglish/ --vocab outputs/tokenizer_wiki.vocab --vocab-size 50000
   $0 build-tokenizer --data data/pretraining/text/trump_3.6.txt --vocab-size 10000
+
+${YELLOW}POST-TRAINING EXAMPLES:${NC}
+  ${GREEN}# Fine-tuning for Classification${NC}
+  $0 post-train fine-tuning --config configs/fine_tuning.json
+  $0 train configs/fine_tuning.json  # Also works
+
+  ${GREEN}# Chain-of-Thought Reasoning${NC}
+  $0 post-train cot --config configs/chain_of_thought.json
+  $0 train configs/chain_of_thought.json  # Also works
+
+  ${GREEN}# RLHF Training${NC}
+  $0 post-train rlhf --config configs/rlhf_training.json
+  $0 train configs/rlhf_training.json  # Also works
 
 ${YELLOW}GENERATION & CHAT:${NC}
   ${GREEN}# Text Generation${NC}

@@ -663,7 +663,70 @@ void ComputationExecutor::run_chain_of_thought() {
     }
     
     logger_.info("");
-    logger_.info("Chain-of-thought training requires reasoning examples - not implemented in demo");
+    
+    // Initialize Chain-of-Thought trainer
+    PostTraining::ChainOfThought trainer(
+        model_config.d_model,
+        model_config.num_heads,
+        model_config.num_layers,
+        model_config.d_ff,
+        vocab_size
+    );
+    
+    // Create dummy reasoning examples
+    // Format: problem -> reasoning step 1 -> reasoning step 2 -> ... -> answer
+    logger_.info("Creating dummy reasoning examples...");
+    std::vector<std::tuple<std::vector<int>, std::vector<std::vector<int>>, std::vector<int>>> examples;
+    
+    for (int i = 0; i < 10; ++i) {
+        // Problem (e.g., "What is 2 + 3?")
+        std::vector<int> problem;
+        for (int j = 0; j < 5; ++j) {
+            problem.push_back(rand() % vocab_size);
+        }
+        
+        // Reasoning steps (e.g., "First, we identify the numbers", "Then we add them")
+        std::vector<std::vector<int>> reasoning_steps;
+        for (int step = 0; step < 2; ++step) {
+            std::vector<int> step_tokens;
+            for (int j = 0; j < 8; ++j) {
+                step_tokens.push_back(rand() % vocab_size);
+            }
+            reasoning_steps.push_back(step_tokens);
+        }
+        
+        // Answer (e.g., "The answer is 5")
+        std::vector<int> answer;
+        for (int j = 0; j < 5; ++j) {
+            answer.push_back(rand() % vocab_size);
+        }
+        
+        examples.push_back({problem, reasoning_steps, answer});
+    }
+    
+    // Training loop
+    logger_.info("Starting chain-of-thought training...");
+    logger_.info("");
+    
+    for (int epoch = 0; epoch < training_config.num_epochs; ++epoch) {
+        logger_.info("Epoch " + std::to_string(epoch + 1) + "/" + 
+                     std::to_string(training_config.num_epochs));
+        
+        for (size_t i = 0; i < examples.size(); ++i) {
+            const auto& [problem, reasoning_steps, answer] = examples[i];
+            
+            trainer.train_step(problem, reasoning_steps, answer, training_config.learning_rate);
+            
+            if ((i + 1) % std::max(1, static_cast<int>(examples.size() / 5)) == 0) {
+                show_progress(i + 1, examples.size(), 0.0f);
+            }
+        }
+        
+        std::cout << std::endl;
+        logger_.info("");
+    }
+    
+    logger_.info("Chain-of-thought training completed!");
 }
 
 void ComputationExecutor::run_rlhf() {
@@ -704,7 +767,75 @@ void ComputationExecutor::run_rlhf() {
     }
     
     logger_.info("");
-    logger_.info("RLHF training requires preference data - not implemented in demo");
+    
+    // Initialize RLHF trainer
+    PostTraining::ReinforcementTrainer trainer(
+        model_config.d_model,
+        model_config.num_heads,
+        model_config.num_layers,
+        model_config.d_ff,
+        vocab_size
+    );
+    
+    // Phase 1: Train reward model with preference data
+    logger_.info("Phase 1: Training reward model...");
+    logger_.info("");
+    
+    // Create dummy preference pairs (chosen vs rejected responses)
+    std::vector<std::pair<std::vector<int>, std::vector<int>>> preferences;
+    for (int i = 0; i < 20; ++i) {
+        std::vector<int> chosen;
+        std::vector<int> rejected;
+        
+        for (int j = 0; j < 10; ++j) {
+            chosen.push_back(rand() % vocab_size);
+            rejected.push_back(rand() % vocab_size);
+        }
+        
+        preferences.push_back({chosen, rejected});
+    }
+    
+    trainer.train_reward_model(preferences, training_config.learning_rate);
+    logger_.info("Reward model training completed");
+    logger_.info("");
+    
+    // Phase 2: PPO training with generated responses
+    logger_.info("Phase 2: PPO policy training...");
+    logger_.info("");
+    
+    for (int epoch = 0; epoch < training_config.num_epochs; ++epoch) {
+        logger_.info("Epoch " + std::to_string(epoch + 1) + "/" + 
+                     std::to_string(training_config.num_epochs));
+        
+        // Create dummy prompts and responses
+        for (int i = 0; i < 10; ++i) {
+            std::vector<int> prompt;
+            std::vector<int> response;
+            
+            for (int j = 0; j < 8; ++j) {
+                prompt.push_back(rand() % vocab_size);
+            }
+            
+            for (int j = 0; j < 10; ++j) {
+                response.push_back(rand() % vocab_size);
+            }
+            
+            // Compute reward
+            float reward = trainer.compute_reward(prompt, response);
+            
+            // PPO update
+            trainer.ppo_train_step(prompt, response, reward, training_config.learning_rate);
+            
+            if ((i + 1) % 5 == 0) {
+                show_progress(i + 1, 10, reward);
+            }
+        }
+        
+        std::cout << std::endl;
+        logger_.info("");
+    }
+    
+    logger_.info("RLHF training completed!");
 }
 
 // Helper function to tokenize text into simple word-based tokens

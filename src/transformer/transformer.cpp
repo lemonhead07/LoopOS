@@ -314,6 +314,30 @@ std::unique_ptr<Math::IMatrix> Transformer::forward(
     return logits;
 }
 
+std::unique_ptr<Math::IMatrix> Transformer::get_hidden_states(
+    const std::vector<int>& token_ids) {
+    PROFILE_FUNCTION();
+    
+    size_t seq_len = token_ids.size();
+    
+    // 1. Embed tokens
+    auto x = embed_tokens(token_ids);
+    
+    // 2. Create causal mask (not strictly needed for classification, but keeps consistency)
+    auto mask = create_causal_mask(seq_len);
+    
+    // 3. Pass through transformer layers
+    for (auto& layer : layers_) {
+        x = layer->forward(*x, mask.get());
+    }
+    
+    // 4. Final layer norm
+    auto normed = final_norm_->forward(*x);
+    
+    // Return hidden states (seq_len x d_model) without output projection
+    return normed;
+}
+
 std::vector<std::unique_ptr<Math::IMatrix>> Transformer::forward_batched(
     const std::vector<std::vector<int>>& token_ids_batch) {
     

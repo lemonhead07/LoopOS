@@ -15,6 +15,11 @@ This directory contains comprehensive documentation for the LoopOS transformer f
 - [GENERATION_WORKFLOW.md](GENERATION_WORKFLOW.md) - Complete workflow for training and text generation
 - [TESTING_AND_CHECKPOINTING_QUICK_REF.md](TESTING_AND_CHECKPOINTING_QUICK_REF.md) - Testing and checkpoint management
 
+### Post-Training Methods
+- [POST_TRAINING_QUICKSTART.md](POST_TRAINING_QUICKSTART.md) - Get started with post-training in 5 minutes
+- [POST_TRAINING_GUIDE.md](POST_TRAINING_GUIDE.md) - Complete guide to fine-tuning, CoT, and RLHF
+- [POST_TRAINING_DATA_FORMATS.md](POST_TRAINING_DATA_FORMATS.md) - Dataset format specifications
+
 ### Feature-Specific Guides
 - [AUTOENCODER_TOKENIZER_QUICKSTART.md](AUTOENCODER_TOKENIZER_QUICKSTART.md) - Using the auto-encoder tokenizer
 - [AUTOENCODER_TOKENIZER_SUMMARY.md](AUTOENCODER_TOKENIZER_SUMMARY.md) - Tokenizer implementation details

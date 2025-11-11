@@ -65,7 +65,7 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Utilities (Logger, Tokenizer, Sampling, Serialization, Profiler, CPUFeatures, ModelLoader, DataLoader, LRScheduler)
+# Utilities (Logger, Tokenizer, Sampling, Serialization, Profiler, CPUFeatures, ModelLoader, DataLoader, LRScheduler, Optimizer, Metrics, PostTrainingDataset, HyperparameterSearch)
 add_library(utils STATIC
     src/utils/logger.cpp
     src/utils/tokenizer.cpp
@@ -79,6 +79,10 @@ add_library(utils STATIC
     src/utils/streaming_data_loader.cpp
     src/utils/streaming_loader_autotune.cpp
     src/utils/lr_scheduler.cpp
+    src/utils/optimizer.cpp
+    src/utils/metrics.cpp
+    src/utils/post_training_dataset.cpp
+    src/utils/hyperparameter_search.cpp
 )
 
 # Auto-Encoder Tokenizer Library
@@ -220,5 +224,12 @@ target_link_libraries(test_decoder autoencoder_tokenizer utils math_backend)
 
 add_executable(test_autoencoder tests/tokenizer/test_autoencoder.cpp)
 target_link_libraries(test_autoencoder autoencoder_tokenizer utils math_backend)
+
+# Interactive CLI
+add_library(interactive_cli STATIC src/cli/interactive_cli.cpp)
+target_link_libraries(interactive_cli config utils)
+
+add_executable(loop_cli_interactive src/interactive_cli_main.cpp)
+target_link_libraries(loop_cli_interactive interactive_cli config utils)
 
 

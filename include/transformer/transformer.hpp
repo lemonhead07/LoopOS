@@ -126,6 +126,10 @@ public:
     // Single sequence forward (for inference)
     std::unique_ptr<Math::IMatrix> forward(const std::vector<int>& token_ids);
     
+    // Get hidden states without output projection (for fine-tuning)
+    // Returns: (seq_len, d_model) hidden states
+    std::unique_ptr<Math::IMatrix> get_hidden_states(const std::vector<int>& token_ids);
+    
     // Generate causal mask for autoregressive modeling
     std::unique_ptr<Math::IMatrix> create_causal_mask(int seq_len);
     
