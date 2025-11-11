@@ -1,6 +1,7 @@
 #pragma once
 
 #include "matrix_interface.hpp"
+#include "utils/aligned_allocator.hpp"
 #include <vector>
 #include <memory>
 
@@ -16,6 +17,7 @@ class CPUMatrix : public IMatrix {
 public:
     CPUMatrix(size_t rows, size_t cols);
     CPUMatrix(size_t rows, size_t cols, const std::vector<float>& data);
+    CPUMatrix(size_t rows, size_t cols, const std::vector<float, Utils::AlignedAllocator<float, 64>>& data);
     CPUMatrix(size_t rows, size_t cols, float initial_value);
     
     ~CPUMatrix() override = default;
@@ -71,9 +73,11 @@ public:
     std::unique_ptr<IMatrix> pow(float exponent) const override;
     
 private:
+    using Storage = std::vector<float, Utils::AlignedAllocator<float, 64>>;
+
     size_t rows_;
     size_t cols_;
-    std::vector<float> data_;
+    Storage data_;
     
     void check_bounds(size_t i, size_t j) const;
     void check_dimensions_match(const IMatrix& other) const;

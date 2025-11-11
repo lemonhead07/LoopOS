@@ -22,13 +22,16 @@ constexpr size_t BLOCK_SIZE = 64;  // Tuned for L1 cache
 constexpr size_t TILE_SIZE = 8;    // For SIMD operations
 
 CPUMatrix::CPUMatrix(size_t rows, size_t cols)
-    : rows_(rows), cols_(cols) {
-    // Allocate with extra space for 64-byte alignment (AVX-512 cache lines)
-    size_t total_size = rows * cols;
-    data_.resize(total_size, 0.0f);
-}
+    : rows_(rows), cols_(cols), data_(rows * cols, 0.0f) {}
 
 CPUMatrix::CPUMatrix(size_t rows, size_t cols, const std::vector<float>& data)
+    : rows_(rows), cols_(cols), data_(data.begin(), data.end()) {
+    if (data_.size() != rows * cols) {
+        throw std::invalid_argument("Data size doesn't match matrix dimensions");
+    }
+}
+
+CPUMatrix::CPUMatrix(size_t rows, size_t cols, const std::vector<float, Utils::AlignedAllocator<float, 64>>& data)
     : rows_(rows), cols_(cols), data_(data) {
     if (data_.size() != rows * cols) {
         throw std::invalid_argument("Data size doesn't match matrix dimensions");
