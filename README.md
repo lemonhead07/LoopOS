@@ -35,7 +35,13 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 ### Run Examples
 
 ```bash
-# Launch interactive CLI (recommended for new users)
+# Simple CLI (easiest - recommended!)
+./loop train configs/autoregressive_tiny.json  # Train tiny model
+./loop test                                     # Quick test
+./loop chat                                     # Chat mode
+./loop help                                     # See all commands
+
+# Launch interactive CLI (full-featured)
 ./scripts/run_cli.sh
 
 # Or use command mode for specific tasks
@@ -45,8 +51,9 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 # Run main demo (hardware detection + matrix operations)
 ./build/loop_os
 
-# Run CLI with a training configuration
+# Run CLI directly with a training configuration
 ./build/loop_cli -c configs/autoregressive_training.json
+./build/loop_cli -c configs/fine_tuning.json
 
 # Run interactive chatbot
 ./build/chat_bot
