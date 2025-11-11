@@ -51,7 +51,8 @@ StreamingDataLoader::StreamingDataLoader(const std::string& corpus_file,
       prefetch_status_visible_(false),
       line_index_built_(false),
       current_line_idx_(0),
-      shuffle_seed_(42) {
+      shuffle_seed_(42),
+      batches_produced_this_epoch_(0) {
     ModuleLogger logger("STREAMING_LOADER");
 
     if (corpus_path_.empty()) {
@@ -116,6 +117,7 @@ void StreamingDataLoader::start_epoch() {
     pending_batch_.clear();
     pending_batch_.reserve(config_.batch_size);
     current_line_idx_ = 0;
+    batches_produced_this_epoch_.store(0);
 
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
@@ -353,6 +355,16 @@ void StreamingDataLoader::reader_thread() {
 void StreamingDataLoader::enqueue_batch(BatchType&& batch) {
     if (batch.empty()) {
         return;
+    }
+
+    // Check if we've reached the max batches limit for this epoch
+    if (config_.max_batches_per_epoch > 0) {
+        size_t current_count = batches_produced_this_epoch_.fetch_add(1);
+        if (current_count >= config_.max_batches_per_epoch) {
+            // We've hit the limit, stop the epoch
+            stop_requested_ = true;
+            return;
+        }
     }
 
     std::unique_lock<std::mutex> lock(queue_mutex_);

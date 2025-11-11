@@ -38,6 +38,7 @@ public:
         size_t queue_capacity = 4;      // Maximum number of batches in queue
         size_t max_sequences_in_memory = 10000;  // Retained for compatibility (unused)
         int max_length = 256;           // Max sequence length (for chunking)
+        size_t max_batches_per_epoch = 0;  // Limit batches per epoch (0 = unlimited)
     };
 
     /**
@@ -87,6 +88,7 @@ private:
     bool line_index_built_;
     size_t current_line_idx_;
     unsigned int shuffle_seed_;
+    std::atomic<size_t> batches_produced_this_epoch_;
 
     std::thread reader_thread_;
     std::atomic<bool> stop_requested_;

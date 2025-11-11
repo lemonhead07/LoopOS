@@ -203,10 +203,11 @@ void ComputationExecutor::run_autoregressive() {
         loader_config.batch_size = training_config.batch_size;
         loader_config.prefetch_batches = training_config.prefetch_batches.value_or(3);
         loader_config.num_workers = training_config.num_workers.value_or(1);
-        loader_config.shuffle = false;
+        loader_config.shuffle = training_config.shuffle.value_or(false);
         loader_config.queue_capacity = std::max<size_t>(loader_config.prefetch_batches * 2, loader_config.prefetch_batches + 1);
         loader_config.max_sequences_in_memory = loader_config.batch_size * loader_config.prefetch_batches;
         loader_config.max_length = training_config.max_length.value_or(256);
+        loader_config.max_batches_per_epoch = training_config.max_batches_per_epoch.value_or(0);
 
         const bool workers_overridden = training_config.num_workers.has_value();
         const bool prefetch_overridden = training_config.prefetch_batches.has_value();

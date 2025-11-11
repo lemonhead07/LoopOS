@@ -19,8 +19,9 @@
     "prefetch_batches": 1,
     "num_workers": 1,
     "shuffle": true,
-    "num_epochs": 3,
-    "random_seed": 42
+    "num_epochs": 20,
+    "random_seed": 42,
+    "max_batches_per_epoch": 10
   },
   "data": {
     "input_file": "data/pretraining/wiki/wiki_corpus.txt",
