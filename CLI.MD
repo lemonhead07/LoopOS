@@ -1,25 +1,27 @@
 # LoopOS Command-Line Interface (CLI)
 
-This document provides comprehensive documentation for the LoopOS command-line tools, including the configuration-based CLI and the interactive menu-driven interface.
+This document provides comprehensive documentation for the LoopOS command-line tools, including the unified interactive CLI runner and configuration-based tools.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Quick Start](#quick-start)
+- [Interactive CLI (run_cli.sh)](#interactive-cli-run_clish)
 - [Command-Line Interface (loop_cli)](#command-line-interface-loop_cli)
-- [Interactive CLI (loop_cli_interactive)](#interactive-cli-loop_cli_interactive)
+- [Unified Build Script](#unified-build-script)
 - [Configuration Files](#configuration-files)
 - [Common Workflows](#common-workflows)
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
 
-LoopOS provides two primary command-line interfaces:
+LoopOS provides a comprehensive command-line interface system:
 
-1. **`loop_cli`** - Configuration-based CLI for running training tasks with JSON configuration files
-2. **`loop_cli_interactive`** - Interactive menu-driven interface for guided configuration and execution
+1. **`scripts/run_cli.sh`** - Unified interactive CLI runner with menu-driven interface
+2. **`build/loop_cli`** - Configuration-based CLI for running training tasks with JSON files
+3. **`scripts/build_unified.sh`** - Unified build script with auto-detection of CPU features
 
-Both tools provide access to the full range of LoopOS capabilities:
+The CLI system provides access to the full range of LoopOS capabilities:
 - Pre-training (Autoregressive, Masked LM, Contrastive Learning)
 - Post-training (Fine-tuning, Chain-of-Thought, RLHF)
 - Text generation from trained models
@@ -29,11 +31,40 @@ Both tools provide access to the full range of LoopOS capabilities:
 
 ## Quick Start
 
-### Using the Configuration-Based CLI
+### Using the Interactive CLI (Recommended for New Users)
+
+```bash
+# Launch interactive menu (default when no arguments)
+./scripts/run_cli.sh
+
+# Or explicitly request interactive mode
+./scripts/run_cli.sh interactive
+./scripts/run_cli.sh -i
+```
+
+The interactive menu will guide you through all available options with a user-friendly interface.
+
+### Using Command Mode
+
+```bash
+# Build the project with auto-detected optimizations
+./scripts/build_unified.sh
+
+# Run a training configuration
+./scripts/run_cli.sh train configs/autoregressive_training.json
+
+# Generate text from a trained model
+./scripts/run_cli.sh generate outputs/autoregressive/model_checkpoint.bin --length 100
+
+# List all available configurations
+./scripts/run_cli.sh list-configs
+```
+
+### Using the Configuration-Based CLI Directly
 
 ```bash
 # Build the project
-./scripts/build.sh
+./scripts/build_unified.sh
 
 # List available configurations
 ./build/loop_cli --list-configs
@@ -48,14 +79,219 @@ Both tools provide access to the full range of LoopOS capabilities:
 ./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin --length 100
 ```
 
-### Using the Interactive CLI
+## Interactive CLI (run_cli.sh)
+
+The `run_cli.sh` script provides a unified interface for all LoopOS operations with two modes:
+
+1. **Interactive Menu Mode** - User-friendly menu-driven interface (default)
+2. **Command Mode** - Direct command execution for automation
+
+### Interactive Menu Mode
+
+When launched without arguments, the script presents an interactive menu:
 
 ```bash
-# Launch the interactive interface
-./build/loop_cli_interactive
+./scripts/run_cli.sh
 ```
 
-The interactive CLI will guide you through configuration and execution with a menu-driven interface.
+This displays:
+
+```
+========================================
+LoopOS Interactive CLI
+========================================
+
+What would you like to do?
+
+  1. Pre-training (GPT-style, BERT-style)
+  2. Post-training (Fine-tuning, CoT, RLHF)
+  3. Text Generation
+  4. Interactive Chat
+  5. Build Tokenizer
+  6. System Benchmarks
+  7. Configuration Management
+  8. Build Project
+  9. Exit
+
+Enter choice [1-9]:
+```
+
+### Menu Features
+
+#### 1. Pre-training
+
+Choose from:
+- **Autoregressive (GPT-style)** - Next-token prediction with available configs
+- **Masked Language Modeling (BERT-style)** - Masked token prediction
+- **Train from vocabulary** - Direct vocabulary-based training
+- **Resume from checkpoint** - Continue training from saved checkpoint
+
+The interface guides you through selecting configuration files or entering custom parameters.
+
+#### 2. Post-training
+
+Choose from:
+- **Fine-tuning** - Classification tasks with supervised learning
+- **Chain-of-Thought** - Reasoning task training
+- **RLHF** - Human preference alignment
+
+Each option prompts for the appropriate configuration file with smart defaults.
+
+#### 3. Text Generation
+
+Interactive generation from trained models:
+- Specify checkpoint path (default: outputs/autoregressive/model_checkpoint.bin)
+- Set generation length (default: 50 tokens)
+- Provide custom prompt token IDs (optional)
+
+#### 4. Interactive Chat
+
+Launch the chatbot interface with optional configuration file.
+
+#### 5. Build Tokenizer
+
+Options for:
+- Building tokenizer vocabulary from data
+- Testing tokenizer (baseline or full suite)
+
+#### 6. System Benchmarks
+
+Run various benchmarks:
+- All benchmarks
+- Tokenizer benchmarks only
+- Model benchmarks only
+- Model architecture tests
+- Forward pass tests
+- Learning rate scheduler demo
+
+#### 7. Configuration Management
+
+Manage configuration files:
+- List all available configurations
+- Validate configuration files
+
+#### 8. Build Project
+
+Build options:
+- Default build
+- AVX2 optimizations
+- AVX-512 optimizations
+- Clean rebuild
+
+### Command Mode
+
+For automation and scripting, use direct commands:
+
+```bash
+# Training
+./scripts/run_cli.sh train <config_file.json>
+./scripts/run_cli.sh train-vocab --data <file|directory> [options]
+./scripts/run_cli.sh resume <checkpoint.bin> --data <file> [options]
+
+# Post-training
+./scripts/run_cli.sh train configs/fine_tuning.json
+
+# Generation
+./scripts/run_cli.sh generate [checkpoint.bin] [options]
+
+# Chat
+./scripts/run_cli.sh chat [config_file.json]
+
+# Tokenizer
+./scripts/run_cli.sh build-tokenizer --data <file|directory> [options]
+./scripts/run_cli.sh tokenizer-test [--baseline|--full]
+
+# Testing
+./scripts/run_cli.sh model-test
+./scripts/run_cli.sh test-forward
+./scripts/run_cli.sh lr-demo
+
+# Benchmarks
+./scripts/run_cli.sh benchmark [--all|--tokenizer|--model]
+
+# Configuration
+./scripts/run_cli.sh validate <config_file.json>
+./scripts/run_cli.sh list-configs
+
+# Build
+./scripts/run_cli.sh build [--avx2|--avx512|--clean]
+
+# Help
+./scripts/run_cli.sh help
+```
+
+### Command Mode Examples
+
+```bash
+# Train with autoregressive config
+./scripts/run_cli.sh train configs/autoregressive_training.json
+
+# Vocabulary-based training with custom parameters
+./scripts/run_cli.sh train-vocab --data data/train.txt --epochs 10 --vocab-size 16000
+
+# Resume training from checkpoint
+./scripts/run_cli.sh resume outputs/model.bin --data data/more_data.txt --epochs 5
+
+# Generate 200 tokens from trained model
+./scripts/run_cli.sh generate outputs/autoregressive/model_checkpoint.bin --length 200
+
+# Build tokenizer from Wikipedia data
+./scripts/run_cli.sh build-tokenizer --data data/wiki/ --vocab outputs/wiki.vocab --vocab-size 50000
+
+# Run all benchmarks
+./scripts/run_cli.sh benchmark --all
+
+# Validate configuration
+./scripts/run_cli.sh validate configs/fine_tuning.json
+
+# Build with AVX-512
+./scripts/run_cli.sh build --avx512
+```
+
+## Unified Build Script
+
+The `build_unified.sh` script consolidates all build options with auto-detection of CPU capabilities.
+
+### Usage
+
+```bash
+./scripts/build_unified.sh [OPTIONS]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--auto` | Auto-detect and use best CPU features (default) |
+| `--default` | Default build without optimizations |
+| `--avx2` | Build with AVX2 optimizations |
+| `--avx512` | Build with AVX-512 optimizations |
+| `--clean` | Clean before building |
+| `--debug` | Build with debug symbols |
+| `--help, -h` | Show help message |
+
+### Build Examples
+
+```bash
+# Auto-detect and build with best optimizations (recommended)
+./scripts/build_unified.sh
+
+# Force AVX2 build
+./scripts/build_unified.sh --avx2
+
+# Clean rebuild with AVX-512
+./scripts/build_unified.sh --clean --avx512
+
+# Debug build
+./scripts/build_unified.sh --debug
+```
+
+The script automatically:
+- Detects CPU capabilities (AVX2, AVX-512)
+- Creates appropriate build directory (build, build_avx2, or build_avx512)
+- Configures CMake with optimal settings
+- Compiles with parallel jobs
+- Reports available executables
 
 ## Command-Line Interface (loop_cli)
 
@@ -436,81 +672,113 @@ Available strategies:
 
 ## Common Workflows
 
-### Workflow 1: Pre-training from Scratch
+### Workflow 1: Pre-training from Scratch (Interactive Mode)
 
 ```bash
-# 1. Build the project
-./scripts/build.sh
+# 1. Launch interactive menu
+./scripts/run_cli.sh
+
+# 2. Select option 8 to build the project (if needed)
+#    The build will auto-detect CPU features
+
+# 3. Select option 1 for Pre-training
+
+# 4. Choose Autoregressive (GPT-style)
+
+# 5. Select a configuration or press Enter for default
+#    The system will guide you through the process
+
+# 6. Training starts automatically
+#    Logs are displayed in real-time
+```
+
+### Workflow 1b: Pre-training from Scratch (Command Mode)
+
+```bash
+# 1. Build the project with auto-detection
+./scripts/build_unified.sh
 
 # 2. Prepare your training data
 # Place text data in data/pretraining/text/
 
-# 3. Create or modify a configuration file
-# Edit configs/autoregressive_training.json
+# 3. Run training with the CLI runner
+./scripts/run_cli.sh train configs/autoregressive_training.json
 
-# 4. Validate the configuration
-./build/loop_cli --validate configs/autoregressive_training.json
-
-# 5. Start training
-./build/loop_cli -c configs/autoregressive_training.json
-
-# 6. Monitor logs
+# 4. Monitor logs
 tail -f logs/loop_cli_*.log
 ```
 
 ### Workflow 2: Fine-tuning a Pre-trained Model
 
 ```bash
-# 1. Ensure you have a pre-trained model checkpoint
-# e.g., outputs/autoregressive/model_checkpoint.bin
+# Interactive mode
+./scripts/run_cli.sh
+# Select option 2 (Post-training) -> option 1 (Fine-tuning)
+# Follow the prompts
 
-# 2. Prepare classification data
-# Format: label\ttext per line
-
-# 3. Update fine-tuning configuration
-# Edit configs/fine_tuning.json
-# Set "pretrained_weights" to your checkpoint path
-
-# 4. Run fine-tuning
-./build/loop_cli -c configs/fine_tuning.json
+# Or use command mode
+./scripts/run_cli.sh train configs/fine_tuning.json
 ```
 
 ### Workflow 3: Generate Text from Trained Model
 
 ```bash
-# Generate text using default settings
-./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin
+# Interactive mode
+./scripts/run_cli.sh
+# Select option 3 (Text Generation)
+# Enter checkpoint path and generation parameters
 
-# Generate longer sequences with custom prompt
+# Or use command mode
+./scripts/run_cli.sh generate outputs/autoregressive/model_checkpoint.bin --length 200
+
+# Or use loop_cli directly
 ./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin \
   --length 200 \
   --prompt 1,10,20
-
-# Use with custom tokenizer
-./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin \
-  --tokenizer outputs/my_tokenizer.vocab \
-  --length 100
 ```
 
-### Workflow 4: Interactive Configuration
+### Workflow 4: Building Custom Tokenizer
 
 ```bash
-# Launch interactive CLI
-./build/loop_cli_interactive
+# Interactive mode
+./scripts/run_cli.sh
+# Select option 5 (Build Tokenizer)
+# Select option 1 (Build tokenizer vocabulary)
+# Enter data path and parameters
 
-# Follow the prompts:
-# 1. Select "Post-training"
-# 2. Select "Fine-tuning"
-# 3. Configure model and training parameters
-# 4. Save configuration as configs/my_fine_tuning.json
-# 5. Start training or exit and run:
+# Or use command mode
+./scripts/run_cli.sh build-tokenizer \
+  --data data/wiki/ \
+  --vocab outputs/wiki.vocab \
+  --vocab-size 50000
+```
 
-./build/loop_cli -c configs/my_fine_tuning.json
+### Workflow 5: Running Benchmarks
+
+```bash
+# Interactive mode - comprehensive benchmark suite
+./scripts/run_cli.sh
+# Select option 6 (System Benchmarks)
+# Choose benchmark type
+
+# Or use command mode for quick benchmarking
+./scripts/run_cli.sh benchmark --all
 ```
 
 ## Troubleshooting
 
 ### Common Issues
+
+#### Build Directory Not Found
+
+```
+Error: No build directory found
+```
+
+**Solution**: The interactive CLI will automatically build the project. Or manually run:
+```bash
+./scripts/build_unified.sh
+```
 
 #### Configuration File Not Found
 
@@ -518,7 +786,10 @@ tail -f logs/loop_cli_*.log
 Error: Could not open configuration file: configs/my_config.json
 ```
 
-**Solution**: Ensure the configuration file exists and the path is correct. Use `--list-configs` to see available configurations.
+**Solution**: Use the interactive menu or list configs:
+```bash
+./scripts/run_cli.sh list-configs
+```
 
 #### Invalid Configuration
 
@@ -526,9 +797,9 @@ Error: Could not open configuration file: configs/my_config.json
 Error: Configuration validation failed
 ```
 
-**Solution**: Use `--validate` to check your configuration and see specific validation errors:
+**Solution**: Validate your configuration:
 ```bash
-./build/loop_cli --validate configs/my_config.json
+./scripts/run_cli.sh validate configs/my_config.json
 ```
 
 #### Missing Data File
@@ -537,7 +808,7 @@ Error: Configuration validation failed
 Error: Could not open input file: data/train.txt
 ```
 
-**Solution**: Verify the `input_file` or `training_data` path in your configuration points to an existing file.
+**Solution**: Verify the path in your configuration points to an existing file.
 
 #### Out of Memory
 
