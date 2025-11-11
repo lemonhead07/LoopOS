@@ -786,7 +786,10 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
         // Start epoch with data loader
         data_loader.start_epoch();
         
-        size_t total_sequences = dataset.size();  // Total sequences for progress calculation
+        // For progress calculation: use max_batches if set, otherwise use dataset size
+        size_t total_sequences = (loader_config.max_batches_per_epoch > 0) 
+            ? loader_config.max_batches_per_epoch * loader_config.batch_size
+            : dataset.size();
         
         float epoch_loss = 0.0f;
         double epoch_time = 0.0;
@@ -1097,42 +1100,40 @@ void AutoregressiveTrainer::train_epoch_streaming(Utils::StreamingDataLoader& da
                 int mins = static_cast<int>(elapsed_sec / 60);
                 int secs = static_cast<int>(elapsed_sec) % 60;
                 
-                // Get corpus progress information
+                // Get corpus reading info for display
                 size_t bytes_read = data_loader.get_bytes_read();
                 size_t total_bytes = data_loader.get_total_bytes();
-
-                double corpus_pct = 0.0;
-                if (total_bytes > 0) {
-                    corpus_pct = (static_cast<double>(bytes_read) / static_cast<double>(total_bytes)) * 100.0;
-                }
+                size_t lines_processed = data_loader.get_lines_processed();
 
                 // Use stderr to avoid mixing with log output
                 std::cerr << "\r\033[K";  // Carriage return + clear line
 
-                // Build progress bar for corpus consumption
+                // Build progress bar based on tokens processed (training progress)
                 size_t bar_width = 30;
-                size_t filled = static_cast<size_t>(bar_width * corpus_pct / 100.0);
+                double tokens_mb = static_cast<double>(total_tokens) / 1000000.0;  // Convert to millions
+                size_t filled = std::min(bar_width, static_cast<size_t>(bar_width * tokens_mb / 10.0));  // Fill based on tokens (arbitrary 10M scale)
 
-                std::cerr << "[";
+                std::cerr << "Training [";
                 for (size_t i = 0; i < bar_width; ++i) {
                     if (i < filled) std::cerr << "=";
                     else if (i == filled) std::cerr << ">";
-                    else std::cerr << " ";
+                    else std::cerr << ".";
                 }
                 std::cerr << "] ";
 
-                std::cerr << std::fixed << std::setprecision(1) << corpus_pct << "%";
-                if (total_bytes > 0) {
-                    double read_mb = static_cast<double>(bytes_read) / (1024.0 * 1024.0);
-                    double total_mb = static_cast<double>(total_bytes) / (1024.0 * 1024.0);
-                    std::cerr << " (" << std::setprecision(2) << read_mb << "/" << total_mb << " MB)";
-                } else {
-                    std::cerr << " (unknown corpus size)";
-                }
+                // Show token count in MB for readability
+                std::cerr << std::fixed << std::setprecision(2) << tokens_mb << "M tokens";
                 
                 // Sequence and line counts
                 std::cerr << " | " << sequences_processed << " seq";
                 std::cerr << " | " << lines_processed << " lines";
+                
+                // Show corpus position (informational)
+                if (total_bytes > 0) {
+                    double read_mb = static_cast<double>(bytes_read) / (1024.0 * 1024.0);
+                    double total_mb = static_cast<double>(total_bytes) / (1024.0 * 1024.0);
+                    std::cerr << " | Corpus: " << std::setprecision(1) << read_mb << "/" << total_mb << " MB";
+                }
                 
                 // Metrics: Loss, tokens/sec
                 std::cerr << " | Loss: " << std::fixed << std::setprecision(4) << avg_loss;
