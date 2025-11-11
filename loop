@@ -28,7 +28,10 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  train <config>          - Train model with config file"
-    echo "  generate [checkpoint]   - Generate text"
+    echo "  generate [checkpoint]   - Generate text from checkpoint"
+    echo "    --length <n>          - Number of tokens to generate (default: 50)"
+    echo "    --prompt <ids>        - Comma-separated token IDs (default: 1,2,3)"
+    echo "    --tokenizer <file>    - Path to tokenizer vocab"
     echo "  chat                    - Interactive chat"
     echo "  build                   - Rebuild project"
     echo "  help                    - Show this help"
@@ -37,6 +40,7 @@ usage() {
     echo "  ./loop train configs/autoregressive_tiny.json"
     echo "  ./loop train configs/wiki_test.json"
     echo "  ./loop generate outputs/autoregressive/model_checkpoint.bin"
+    echo "  ./loop generate outputs/autoregressive/model_checkpoint.bin --length 100"
     echo "  ./loop chat"
     echo ""
 }
@@ -61,15 +65,17 @@ case "${1:-help}" in
     
     generate|gen|g)
         CHECKPOINT="${2:-outputs/autoregressive/model_checkpoint.bin}"
+        shift 2 || shift 1  # Consume checkpoint arg if provided
         
         if [ ! -f "$CHECKPOINT" ]; then
             echo -e "${YELLOW}Warning: Checkpoint not found: $CHECKPOINT${NC}"
-            echo "Using default checkpoint path if available..."
+            echo "Available checkpoints:"
+            find outputs -name "*.bin" 2>/dev/null | head -5
+            exit 1
         fi
         
-        echo -e "${GREEN}Generating text${NC}"
-        # TODO: Add generation command when implemented
-        echo -e "${YELLOW}Generation not yet implemented in CLI${NC}"
+        echo -e "${GREEN}Generating text from: $CHECKPOINT${NC}"
+        "$LOOP_CLI" --generate "$CHECKPOINT" "$@"
         ;;
     
     chat|c)
