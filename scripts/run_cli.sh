@@ -41,7 +41,12 @@ show_usage() {
     cat << EOF
 ${CYAN}LoopOS CLI - Enhanced Runner${NC}
 
-${YELLOW}USAGE:${NC}
+${YELLOW}INTERACTIVE MODE:${NC}
+  $0                   # Launch interactive menu (default)
+  $0 interactive       # Launch interactive menu
+  $0 -i                # Launch interactive menu
+
+${YELLOW}COMMAND MODE:${NC}
   Training:         $0 train <config_file.json>
   Post-Training:    $0 post-train <fine-tuning|cot|rlhf> [options]
   Vocab Training:   $0 train-vocab --data <file|directory> [options]
@@ -158,8 +163,8 @@ ensure_build() {
     
     if [ -z "$build_dir" ]; then
         print_warning "No build directory found. Building project..."
-        ./scripts/build.sh
-        build_dir="build"
+        ./scripts/build_unified.sh --auto
+        build_dir=$(find_build_dir)
     fi
     
     # Export for use in other functions
@@ -168,27 +173,26 @@ ensure_build() {
 
 # Build with specific options
 do_build() {
-    local build_type="${1:-default}"
+    local build_type="${1}"
     
     print_header "Building LoopOS"
     
     case "$build_type" in
         --avx2)
             print_info "Building with AVX2 optimizations..."
-            ./scripts/build_avx2.sh
+            ./scripts/build_unified.sh --avx2
             ;;
         --avx512)
             print_info "Building with AVX-512 optimizations..."
-            ./scripts/build_avx512.sh
+            ./scripts/build_unified.sh --avx512
             ;;
         --clean)
             print_info "Cleaning and rebuilding..."
-            ./scripts/clean.sh
-            ./scripts/build.sh
+            ./scripts/build_unified.sh --clean --auto
             ;;
         *)
-            print_info "Building with default settings..."
-            ./scripts/build.sh
+            print_info "Building with auto-detected optimizations..."
+            ./scripts/build_unified.sh --auto
             ;;
     esac
     
@@ -587,17 +591,389 @@ do_profiling() {
     ./scripts/run_profiling_test.sh "$config_file"
 }
 
+# Interactive menu mode
+show_interactive_menu() {
+    local choice
+    
+    while true; do
+        clear
+        print_header "LoopOS Interactive CLI"
+        echo ""
+        echo "What would you like to do?"
+        echo ""
+        echo "  1. Pre-training (GPT-style, BERT-style)"
+        echo "  2. Post-training (Fine-tuning, CoT, RLHF)"
+        echo "  3. Text Generation"
+        echo "  4. Interactive Chat"
+        echo "  5. Build Tokenizer"
+        echo "  6. System Benchmarks"
+        echo "  7. Configuration Management"
+        echo "  8. Build Project"
+        echo "  9. Exit"
+        echo ""
+        read -p "Enter choice [1-9]: " choice
+        
+        case "$choice" in
+            1) interactive_pretraining ;;
+            2) interactive_posttraining ;;
+            3) interactive_generation ;;
+            4) interactive_chat ;;
+            5) interactive_tokenizer ;;
+            6) interactive_benchmarks ;;
+            7) interactive_config_management ;;
+            8) interactive_build ;;
+            9) 
+                echo ""
+                print_success "Thank you for using LoopOS!"
+                exit 0
+                ;;
+            *)
+                print_error "Invalid choice. Please select 1-9."
+                sleep 2
+                ;;
+        esac
+    done
+}
+
+# Interactive sub-menu: Pre-training
+interactive_pretraining() {
+    clear
+    print_header "Pre-training Methods"
+    echo ""
+    echo "Choose a pre-training method:"
+    echo ""
+    echo "  1. Autoregressive (GPT-style)"
+    echo "  2. Masked Language Modeling (BERT-style)"
+    echo "  3. Train from vocabulary"
+    echo "  4. Resume from checkpoint"
+    echo "  5. Back to main menu"
+    echo ""
+    read -p "Enter choice [1-5]: " choice
+    
+    case "$choice" in
+        1)
+            echo ""
+            print_info "Available configurations:"
+            ls -1 configs/autoregressive*.json 2>/dev/null | sed 's/^/  - /'
+            echo ""
+            read -p "Enter config file path (or press Enter for default): " config
+            config=${config:-configs/autoregressive_training.json}
+            if [ -f "$config" ]; then
+                do_training "$config"
+            else
+                print_error "Config file not found: $config"
+            fi
+            ;;
+        2)
+            echo ""
+            read -p "Enter config file path (or press Enter for default): " config
+            config=${config:-configs/masked_lm_training.json}
+            if [ -f "$config" ]; then
+                do_training "$config"
+            else
+                print_error "Config file not found: $config"
+            fi
+            ;;
+        3)
+            echo ""
+            read -p "Enter data file/directory: " data_path
+            if [ -n "$data_path" ]; then
+                read -p "Number of epochs (default: 10): " epochs
+                epochs=${epochs:-10}
+                read -p "Vocabulary size (default: 16000): " vocab_size
+                vocab_size=${vocab_size:-16000}
+                do_train_vocab --data "$data_path" --epochs "$epochs" --vocab-size "$vocab_size"
+            else
+                print_error "Data path required"
+            fi
+            ;;
+        4)
+            echo ""
+            read -p "Enter checkpoint path: " checkpoint
+            if [ -f "$checkpoint" ]; then
+                read -p "Enter data file/directory: " data_path
+                if [ -n "$data_path" ]; then
+                    do_resume_training "$checkpoint" --data "$data_path"
+                else
+                    print_error "Data path required"
+                fi
+            else
+                print_error "Checkpoint not found: $checkpoint"
+            fi
+            ;;
+        5) return ;;
+        *) 
+            print_error "Invalid choice"
+            sleep 2
+            interactive_pretraining
+            ;;
+    esac
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Interactive sub-menu: Post-training
+interactive_posttraining() {
+    clear
+    print_header "Post-Training Methods"
+    echo ""
+    echo "Choose a post-training method:"
+    echo ""
+    echo "  1. Fine-tuning (Classification tasks)"
+    echo "  2. Chain-of-Thought (Reasoning tasks)"
+    echo "  3. RLHF (Human preference alignment)"
+    echo "  4. Back to main menu"
+    echo ""
+    read -p "Enter choice [1-4]: " choice
+    
+    case "$choice" in
+        1)
+            echo ""
+            read -p "Enter config file path (or press Enter for default): " config
+            config=${config:-configs/fine_tuning.json}
+            if [ -f "$config" ]; then
+                do_training "$config"
+            else
+                print_error "Config file not found: $config"
+            fi
+            ;;
+        2)
+            echo ""
+            read -p "Enter config file path (or press Enter for default): " config
+            config=${config:-configs/chain_of_thought.json}
+            if [ -f "$config" ]; then
+                do_training "$config"
+            else
+                print_error "Config file not found: $config"
+            fi
+            ;;
+        3)
+            echo ""
+            read -p "Enter config file path (or press Enter for default): " config
+            config=${config:-configs/rlhf_training.json}
+            if [ -f "$config" ]; then
+                do_training "$config"
+            else
+                print_error "Config file not found: $config"
+            fi
+            ;;
+        4) return ;;
+        *) 
+            print_error "Invalid choice"
+            sleep 2
+            interactive_posttraining
+            ;;
+    esac
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Interactive sub-menu: Text Generation
+interactive_generation() {
+    clear
+    print_header "Text Generation"
+    echo ""
+    read -p "Enter checkpoint path (or press Enter for default): " checkpoint
+    checkpoint=${checkpoint:-outputs/autoregressive/model_checkpoint.bin}
+    
+    if [ ! -f "$checkpoint" ]; then
+        print_error "Checkpoint not found: $checkpoint"
+        echo ""
+        read -p "Press Enter to continue..."
+        return
+    fi
+    
+    echo ""
+    read -p "Number of tokens to generate (default: 50): " length
+    length=${length:-50}
+    
+    read -p "Prompt token IDs (comma-separated, or press Enter for default): " prompt
+    
+    if [ -n "$prompt" ]; then
+        do_generation "$checkpoint" --length "$length" --prompt "$prompt"
+    else
+        do_generation "$checkpoint" --length "$length"
+    fi
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Interactive sub-menu: Chat
+interactive_chat() {
+    clear
+    print_header "Interactive Chat"
+    echo ""
+    read -p "Enter config file path (or press Enter for default): " config
+    config=${config:-configs/chat_config.json}
+    
+    do_chat "$config"
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Interactive sub-menu: Tokenizer
+interactive_tokenizer() {
+    clear
+    print_header "Build Tokenizer"
+    echo ""
+    echo "  1. Build tokenizer vocabulary"
+    echo "  2. Test tokenizer (baseline)"
+    echo "  3. Test tokenizer (full suite)"
+    echo "  4. Back to main menu"
+    echo ""
+    read -p "Enter choice [1-4]: " choice
+    
+    case "$choice" in
+        1)
+            echo ""
+            read -p "Enter data file/directory: " data_path
+            if [ -n "$data_path" ]; then
+                read -p "Output vocab file (default: outputs/tokenizer.vocab): " vocab_file
+                vocab_file=${vocab_file:-outputs/tokenizer.vocab}
+                read -p "Vocabulary size (default: 16000): " vocab_size
+                vocab_size=${vocab_size:-16000}
+                do_build_tokenizer --data "$data_path" --vocab "$vocab_file" --vocab-size "$vocab_size"
+            else
+                print_error "Data path required"
+            fi
+            ;;
+        2)
+            do_tokenizer_test --baseline
+            ;;
+        3)
+            do_tokenizer_test --full
+            ;;
+        4) return ;;
+        *) 
+            print_error "Invalid choice"
+            sleep 2
+            interactive_tokenizer
+            ;;
+    esac
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Interactive sub-menu: Benchmarks
+interactive_benchmarks() {
+    clear
+    print_header "System Benchmarks"
+    echo ""
+    echo "  1. Run all benchmarks"
+    echo "  2. Tokenizer benchmarks only"
+    echo "  3. Model benchmarks only"
+    echo "  4. Model architecture tests"
+    echo "  5. Forward pass tests"
+    echo "  6. Learning rate scheduler demo"
+    echo "  7. Back to main menu"
+    echo ""
+    read -p "Enter choice [1-7]: " choice
+    
+    case "$choice" in
+        1) do_benchmark --all ;;
+        2) do_benchmark --tokenizer ;;
+        3) do_benchmark --model ;;
+        4) do_model_test ;;
+        5) do_test_forward ;;
+        6) do_lr_demo ;;
+        7) return ;;
+        *) 
+            print_error "Invalid choice"
+            sleep 2
+            interactive_benchmarks
+            ;;
+    esac
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Interactive sub-menu: Configuration Management
+interactive_config_management() {
+    clear
+    print_header "Configuration Management"
+    echo ""
+    echo "  1. List available configurations"
+    echo "  2. Validate configuration file"
+    echo "  3. Back to main menu"
+    echo ""
+    read -p "Enter choice [1-3]: " choice
+    
+    case "$choice" in
+        1)
+            do_list_configs
+            ;;
+        2)
+            echo ""
+            read -p "Enter config file path: " config
+            if [ -n "$config" ]; then
+                do_validate_config "$config"
+            else
+                print_error "Config file path required"
+            fi
+            ;;
+        3) return ;;
+        *) 
+            print_error "Invalid choice"
+            sleep 2
+            interactive_config_management
+            ;;
+    esac
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
+# Interactive sub-menu: Build
+interactive_build() {
+    clear
+    print_header "Build Project"
+    echo ""
+    echo "  1. Default build"
+    echo "  2. Build with AVX2 optimizations"
+    echo "  3. Build with AVX-512 optimizations"
+    echo "  4. Clean rebuild"
+    echo "  5. Back to main menu"
+    echo ""
+    read -p "Enter choice [1-5]: " choice
+    
+    case "$choice" in
+        1) do_build ;;
+        2) do_build --avx2 ;;
+        3) do_build --avx512 ;;
+        4) do_build --clean ;;
+        5) return ;;
+        *) 
+            print_error "Invalid choice"
+            sleep 2
+            interactive_build
+            ;;
+    esac
+    
+    echo ""
+    read -p "Press Enter to continue..."
+}
+
 # Main command dispatcher
 main() {
+    # If no arguments, show interactive menu
     if [ "$#" -lt 1 ]; then
-        show_usage
-        exit 1
+        show_interactive_menu
+        exit 0
     fi
     
     local command="$1"
     shift
     
     case "$command" in
+        interactive|menu|-i|--interactive)
+            show_interactive_menu
+            ;;
         train|training)
             do_training "$@"
             ;;

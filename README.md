@@ -25,12 +25,23 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 ### Build
 
 ```bash
+# Build with auto-detected optimizations (recommended)
+./scripts/build_unified.sh
+
+# Or use the basic build script
 ./scripts/build.sh
 ```
 
 ### Run Examples
 
 ```bash
+# Launch interactive CLI (recommended for new users)
+./scripts/run_cli.sh
+
+# Or use command mode for specific tasks
+./scripts/run_cli.sh train configs/autoregressive_training.json
+./scripts/run_cli.sh generate outputs/model.bin --length 200
+
 # Run main demo (hardware detection + matrix operations)
 ./build/loop_os
 
@@ -74,6 +85,7 @@ ctest
 ## Documentation
 
 - **[QUICKSTART.md](QUICKSTART.md)** - Detailed getting started guide
+- **[CLI.md](CLI.md)** - Complete CLI reference and user guide
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete architecture documentation for developers and LLMs
 - **[ADAPTIVE_LR_GUIDE.md](ADAPTIVE_LR_GUIDE.md)** - Adaptive learning rate implementation guide
 - **[docs/](docs/)** - Comprehensive documentation library
