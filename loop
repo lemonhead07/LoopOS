@@ -1,0 +1,100 @@
+#!/bin/bash
+
+# Simple LoopOS CLI wrapper
+# Usage: ./loop [command] [args...]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$SCRIPT_DIR/build"
+LOOP_CLI="$BUILD_DIR/loop_cli"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Check if built
+if [ ! -f "$LOOP_CLI" ]; then
+    echo -e "${RED}Error: loop_cli not found. Run ./scripts/build.sh first${NC}"
+    exit 1
+fi
+
+# Show simple usage
+usage() {
+    echo -e "${BLUE}LoopOS - Simple CLI${NC}"
+    echo ""
+    echo "Usage: ./loop <command> [args...]"
+    echo ""
+    echo "Commands:"
+    echo "  train <config>          - Train model with config file"
+    echo "  generate [checkpoint]   - Generate text"
+    echo "  chat                    - Interactive chat"
+    echo "  build                   - Rebuild project"
+    echo "  help                    - Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  ./loop train configs/autoregressive_tiny.json"
+    echo "  ./loop train configs/wiki_test.json"
+    echo "  ./loop generate outputs/autoregressive/model_checkpoint.bin"
+    echo "  ./loop chat"
+    echo ""
+}
+
+# Main command handling
+case "${1:-help}" in
+    train|t)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: No config file specified${NC}"
+            echo "Usage: ./loop train <config.json>"
+            exit 1
+        fi
+        
+        if [ ! -f "$2" ]; then
+            echo -e "${RED}Error: Config file not found: $2${NC}"
+            exit 1
+        fi
+        
+        echo -e "${GREEN}Training with: $2${NC}"
+        "$LOOP_CLI" -c "$2"
+        ;;
+    
+    generate|gen|g)
+        CHECKPOINT="${2:-outputs/autoregressive/model_checkpoint.bin}"
+        
+        if [ ! -f "$CHECKPOINT" ]; then
+            echo -e "${YELLOW}Warning: Checkpoint not found: $CHECKPOINT${NC}"
+            echo "Using default checkpoint path if available..."
+        fi
+        
+        echo -e "${GREEN}Generating text${NC}"
+        # TODO: Add generation command when implemented
+        echo -e "${YELLOW}Generation not yet implemented in CLI${NC}"
+        ;;
+    
+    chat|c)
+        echo -e "${GREEN}Starting chat mode${NC}"
+        "$BUILD_DIR/chat_bot"
+        ;;
+    
+    build|b)
+        echo -e "${GREEN}Building LoopOS${NC}"
+        "$SCRIPT_DIR/scripts/build.sh"
+        ;;
+    
+    test|quick)
+        echo -e "${GREEN}Quick test with tiny config${NC}"
+        "$LOOP_CLI" -c configs/autoregressive_tiny.json
+        ;;
+    
+    help|h|-h|--help)
+        usage
+        ;;
+    
+    *)
+        echo -e "${RED}Unknown command: $1${NC}"
+        echo ""
+        usage
+        exit 1
+        ;;
+esac

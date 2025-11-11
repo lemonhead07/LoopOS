@@ -10,6 +10,8 @@
 #include "utils/system_info.hpp"
 #include "utils/streaming_data_loader.hpp"
 #include "utils/streaming_loader_autotune.hpp"
+#include "utils/post_training_dataset.hpp"
+#include "utils/tokenizer.hpp"
 #include "hardware/cpu_detector.hpp"
 #include "hardware/memory_detector.hpp"
 #include <stdexcept>
@@ -590,16 +592,73 @@ void ComputationExecutor::run_fine_tuning() {
         num_classes
     );
     
-    // Create dummy classification data
-    logger_.info("Creating dummy classification data...");
+    // Load actual training data
     std::vector<std::pair<std::vector<int>, int>> training_samples;
-    for (int i = 0; i < 20; ++i) {
-        std::vector<int> seq;
-        for (int j = 0; j < 15; ++j) {
-            seq.push_back(rand() % vocab_size);
+    
+    if (data_config.training_data.has_value()) {
+        std::string data_path = data_config.training_data.value();
+        logger_.info("Loading training data from: " + data_path);
+        
+        try {
+            // Try to load as structured dataset (JSONL/CSV)
+            auto examples = Utils::FineTuningDataset::load(data_path);
+            logger_.info("Loaded " + std::to_string(examples.size()) + " labeled examples");
+            
+            // Simple tokenization: split on spaces and map to integers
+            std::unordered_map<std::string, int> word_to_id;
+            int next_id = 0;
+            
+            // Convert text examples to token sequences
+            for (const auto& ex : examples) {
+                std::vector<int> tokens;
+                std::istringstream iss(ex.text);
+                std::string word;
+                
+                while (iss >> word) {
+                    if (word_to_id.find(word) == word_to_id.end()) {
+                        word_to_id[word] = next_id++;
+                    }
+                    tokens.push_back(word_to_id[word]);
+                }
+                
+                if (!tokens.empty() && ex.label >= 0 && ex.label < num_classes) {
+                    training_samples.push_back(std::make_pair(tokens, ex.label));
+                }
+            }
+            
+            if (training_samples.empty()) {
+                throw std::runtime_error("No valid training samples after tokenization");
+            }
+            
+            logger_.info("Created " + std::to_string(training_samples.size()) + " training samples");
+            logger_.info("Vocabulary size: " + std::to_string(word_to_id.size()) + " words");
+            
+        } catch (const std::exception& e) {
+            logger_.warning("Could not load structured dataset: " + std::string(e.what()));
+            logger_.warning("Falling back to dummy data for demonstration");
+            
+            // Fallback to dummy data
+            for (int i = 0; i < 20; ++i) {
+                std::vector<int> seq;
+                for (int j = 0; j < 15; ++j) {
+                    seq.push_back(rand() % vocab_size);
+                }
+                int label = rand() % num_classes;
+                training_samples.push_back({seq, label});
+            }
         }
-        int label = rand() % num_classes;
-        training_samples.push_back({seq, label});
+    } else {
+        logger_.warning("No training_data specified in config, using dummy data");
+        
+        // Create dummy classification data
+        for (int i = 0; i < 20; ++i) {
+            std::vector<int> seq;
+            for (int j = 0; j < 15; ++j) {
+                seq.push_back(rand() % vocab_size);
+            }
+            int label = rand() % num_classes;
+            training_samples.push_back({seq, label});
+        }
     }
     
     // Training loop

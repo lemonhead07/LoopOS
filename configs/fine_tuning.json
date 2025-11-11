@@ -22,8 +22,8 @@
     "num_epochs": 5
   },
   "data": {
-    "pretrained_weights": "models/pretrained_model.bin",
-    "training_data": "data/classification_train.txt",
+    "pretrained_weights": "outputs/autoregressive/model_checkpoint.bin",
+    "training_data": "data/fine_tuning_examples.jsonl",
     "output_dir": "outputs/fine_tuned"
   }
 }
