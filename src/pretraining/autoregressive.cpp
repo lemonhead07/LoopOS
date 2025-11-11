@@ -786,10 +786,8 @@ void AutoregressiveTrainer::train_epoch(const std::vector<std::vector<int>>& dat
         // Start epoch with data loader
         data_loader.start_epoch();
         
-        // For progress calculation: use max_batches if set, otherwise use dataset size
-        size_t total_sequences = (loader_config.max_batches_per_epoch > 0) 
-            ? loader_config.max_batches_per_epoch * loader_config.batch_size
-            : dataset.size();
+        // Use dataset size for progress (DataLoader loads full dataset)
+        size_t total_sequences = dataset.size();
         
         float epoch_loss = 0.0f;
         double epoch_time = 0.0;
