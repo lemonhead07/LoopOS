@@ -225,4 +225,11 @@ target_link_libraries(test_decoder autoencoder_tokenizer utils math_backend)
 add_executable(test_autoencoder tests/tokenizer/test_autoencoder.cpp)
 target_link_libraries(test_autoencoder autoencoder_tokenizer utils math_backend)
 
+# Interactive CLI
+add_library(interactive_cli STATIC src/cli/interactive_cli.cpp)
+target_link_libraries(interactive_cli config utils)
+
+add_executable(loop_cli_interactive src/interactive_cli_main.cpp)
+target_link_libraries(loop_cli_interactive interactive_cli config utils)
+
 
