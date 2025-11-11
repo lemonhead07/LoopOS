@@ -74,6 +74,7 @@ ctest
 ## Documentation
 
 - **[QUICKSTART.md](QUICKSTART.md)** - Detailed getting started guide
+- **[CLI.md](CLI.md)** - Complete CLI reference and user guide
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete architecture documentation for developers and LLMs
 - **[ADAPTIVE_LR_GUIDE.md](ADAPTIVE_LR_GUIDE.md)** - Adaptive learning rate implementation guide
 - **[docs/](docs/)** - Comprehensive documentation library
