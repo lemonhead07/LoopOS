@@ -1,0 +1,33 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 256,
+    "num_heads": 8,
+    "num_layers": 4,
+    "d_ff": 1024,
+    "vocab_size": 16000
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "autoregressive",
+    "description": "Full Wikipedia pretraining - Sequential reading optimized for laptop (8GB RAM)"
+  },
+  "training": {
+    "learning_rate": 0.0001,
+    "max_length": 128,
+    "batch_size": 12,
+    "max_tokens": 100000000,
+    "num_epochs": 1,
+    "shuffle": false
+  },
+  "data": {
+    "input_file": "data/pretraining/wiki/wiki_corpus.txt",
+    "output_dir": "outputs/wiki_pretrained",
+    "tokenizer_vocab": "outputs/tokenizer_wiki.vocab"
+  },
+  "checkpointing": {
+    "save_every_n_batches": 1000,
+    "keep_last_n": 5,
+    "save_path": "outputs/wiki_pretrained/checkpoints"
+  }
+}

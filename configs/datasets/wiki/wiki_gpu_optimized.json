@@ -1,0 +1,33 @@
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 512,
+    "num_heads": 8,
+    "num_layers": 6,
+    "d_ff": 2048,
+    "vocab_size": 16000
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "autoregressive",
+    "description": "GPU-optimized - Sequential reading with larger batches for GPU throughput"
+  },
+  "training": {
+    "learning_rate": 0.0001,
+    "max_length": 256,
+    "batch_size": 64,
+    "max_tokens": 50000000,
+    "num_epochs": 1,
+    "shuffle": false
+  },
+  "data": {
+    "input_file": "data/pretraining/wiki/wiki_corpus.txt",
+    "output_dir": "outputs/wiki_gpu_optimized",
+    "tokenizer_vocab": "outputs/tokenizer_wiki.vocab"
+  },
+  "checkpointing": {
+    "save_every_n_batches": 200,
+    "keep_last_n": 5,
+    "save_path": "outputs/wiki_gpu_optimized/checkpoints"
+  }
+}
