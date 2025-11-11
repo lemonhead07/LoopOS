@@ -65,7 +65,7 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Utilities (Logger, Tokenizer, Sampling, Serialization, Profiler, CPUFeatures, ModelLoader, DataLoader, LRScheduler, Optimizer, Metrics, PostTrainingDataset)
+# Utilities (Logger, Tokenizer, Sampling, Serialization, Profiler, CPUFeatures, ModelLoader, DataLoader, LRScheduler, Optimizer, Metrics, PostTrainingDataset, HyperparameterSearch)
 add_library(utils STATIC
     src/utils/logger.cpp
     src/utils/tokenizer.cpp
@@ -82,6 +82,7 @@ add_library(utils STATIC
     src/utils/optimizer.cpp
     src/utils/metrics.cpp
     src/utils/post_training_dataset.cpp
+    src/utils/hyperparameter_search.cpp
 )
 
 # Auto-Encoder Tokenizer Library
