@@ -16,14 +16,14 @@
     "learning_rate": 0.0001,
     "max_length": 128,
     "batch_size": 20,
-    "prefetch_batches": 3,
-    "num_workers": 3,
+    "prefetch_batches": 1,
+    "num_workers": 1,
     "shuffle": true,
     "num_epochs": 1,
     "random_seed": 42
   },
   "data": {
-    "input_file": "data/pretraining/wiki/wiki_cache_corpus.txt",
+    "input_file": "data/pretraining/wiki/wiki_corpus.txt",
     "output_dir": "outputs/wiki_cache_optimized",
     "tokenizer_vocab": "outputs/tokenizer_wiki.vocab",
     "max_files": 100,

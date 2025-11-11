@@ -68,6 +68,8 @@ private:
     void finalize_pending_batch();
     void clear_status_line();
     void report_prefetch_status(size_t queue_size);
+    void build_line_index();
+    void shuffle_line_order();
 
     std::string corpus_path_;
     ::Utils::Tokenizer& tokenizer_;
@@ -78,6 +80,13 @@ private:
     std::atomic<size_t> bytes_read_;
     std::atomic<size_t> sequences_processed_;
     std::atomic<size_t> lines_processed_;
+    
+    // Line shuffling support
+    std::vector<std::streampos> line_offsets_;
+    std::vector<size_t> line_order_;
+    bool line_index_built_;
+    size_t current_line_idx_;
+    unsigned int shuffle_seed_;
 
     std::thread reader_thread_;
     std::atomic<bool> stop_requested_;

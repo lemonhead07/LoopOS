@@ -1,23 +1,23 @@
 {
   "model": {
     "type": "transformer",
-    "d_model": 512,
+    "d_model": 256,
     "num_heads": 8,
-    "num_layers": 6,
-    "d_ff": 2048,
+    "num_layers": 4,
+    "d_ff": 1024,
     "vocab_size": 16000
   },
   "computation": {
     "mode": "pretraining",
     "method": "autoregressive",
-    "description": "GPT-style pretraining on Wikipedia dataset - Full scale language model"
+    "description": "Laptop-optimized pretraining on Wikipedia - Conservative settings for 8GB RAM + i5-1135G7"
   },
   "training": {
     "learning_rate": 0.0001,
-    "max_length": 256,
-    "batch_size": 12,
-    "prefetch_batches": 3,
-    "num_workers": 3,
+    "max_length": 128,
+    "batch_size": 8,
+    "prefetch_batches": 1,
+    "num_workers": 1,
     "shuffle": true,
     "num_epochs": 3,
     "random_seed": 42
@@ -42,8 +42,8 @@
     "report_top_n": 20
   },
   "checkpointing": {
-    "save_every_n_batches": 1000,
-    "keep_last_n": 5,
+    "save_every_n_batches": 500,
+    "keep_last_n": 3,
     "save_path": "outputs/wiki_pretrained/checkpoints"
   }
 }

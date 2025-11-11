@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <random>
 
 namespace LoopOS {
 namespace Utils {
@@ -47,7 +48,10 @@ StreamingDataLoader::StreamingDataLoader(const std::string& corpus_file,
       stop_requested_(false),
       epoch_active_(false),
       reader_finished_(true),
-      prefetch_status_visible_(false) {
+      prefetch_status_visible_(false),
+      line_index_built_(false),
+      current_line_idx_(0),
+      shuffle_seed_(42) {
     ModuleLogger logger("STREAMING_LOADER");
 
     if (corpus_path_.empty()) {
@@ -83,6 +87,13 @@ StreamingDataLoader::StreamingDataLoader(const std::string& corpus_file,
     pending_batch_.reserve(config_.batch_size);
     last_prefetch_status_time_ = std::chrono::steady_clock::time_point{};
 
+    // Build line index if shuffle is enabled
+    if (config_.shuffle) {
+        logger.info("Building line index for shuffling...");
+        build_line_index();
+        logger.info("Line index built with " + std::to_string(line_offsets_.size()) + " lines");
+    }
+
     logger.info("StreamingDataLoader initialized - corpus: " + corpus_path_);
 }
 
@@ -104,6 +115,7 @@ void StreamingDataLoader::start_epoch() {
     lines_processed_.store(0);
     pending_batch_.clear();
     pending_batch_.reserve(config_.batch_size);
+    current_line_idx_ = 0;
 
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
@@ -118,6 +130,12 @@ void StreamingDataLoader::start_epoch() {
         last_prefetch_status_time_ = std::chrono::steady_clock::time_point{};
     }
 
+    // Shuffle line order if enabled
+    if (config_.shuffle && !line_offsets_.empty()) {
+        shuffle_line_order();
+        logger.info("Lines shuffled for new epoch (seed: " + std::to_string(shuffle_seed_) + ")");
+    }
+
     if (corpus_stream_.is_open()) {
         corpus_stream_.close();
     }
@@ -129,7 +147,8 @@ void StreamingDataLoader::start_epoch() {
         throw std::runtime_error("Failed to open corpus file: " + corpus_path_);
     }
 
-    logger.info("Epoch started - streaming corpus sequentially");
+    logger.info("Epoch started - streaming corpus" + 
+                std::string(config_.shuffle ? " (shuffled)" : " sequentially"));
 
     reader_thread_ = std::thread(&StreamingDataLoader::reader_thread, this);
 }
@@ -207,52 +226,115 @@ void StreamingDataLoader::reader_thread() {
 
     std::string line;
 
-    while (!stop_requested_ && std::getline(corpus_stream_, line)) {
-        std::streampos tell = corpus_stream_.tellg();
-        if (tell >= 0) {
-            bytes_read_.store(static_cast<size_t>(tell));
-        }
+    if (config_.shuffle && !line_offsets_.empty()) {
+        // Shuffled reading: seek to each line position
+        while (!stop_requested_ && current_line_idx_ < line_order_.size()) {
+            size_t line_idx = line_order_[current_line_idx_];
+            current_line_idx_++;
+            
+            if (line_idx >= line_offsets_.size()) {
+                continue;
+            }
+            
+            std::streampos pos = line_offsets_[line_idx];
+            corpus_stream_.seekg(pos);
+            
+            if (!std::getline(corpus_stream_, line)) {
+                continue;
+            }
+            
+            bytes_read_.store(static_cast<size_t>(corpus_stream_.tellg()));
+            lines_processed_.fetch_add(1);
 
-        lines_processed_.fetch_add(1);
+            if (line.empty()) {
+                continue;
+            }
 
-        if (line.empty()) {
-            continue;
-        }
+            auto tokens = tokenizer_.encode(line, false);
+            if (tokens.empty()) {
+                continue;
+            }
 
-        auto tokens = tokenizer_.encode(line, false);
-        if (tokens.empty()) {
-            continue;
-        }
+            size_t max_len = config_.max_length > 0 ? static_cast<size_t>(config_.max_length)
+                                                    : tokens.size();
+            max_len = std::max<size_t>(1, max_len);
 
-        size_t max_len = config_.max_length > 0 ? static_cast<size_t>(config_.max_length)
-                                                : tokens.size();
-        max_len = std::max<size_t>(1, max_len);
-
-        if (tokens.size() <= max_len) {
-            pending_batch_.push_back(std::move(tokens));
-            sequences_processed_.fetch_add(1);
-        } else {
-            for (size_t offset = 0; offset < tokens.size(); offset += max_len) {
-                size_t chunk_size = std::min(max_len, tokens.size() - offset);
-                std::vector<int> chunk(tokens.begin() + static_cast<std::ptrdiff_t>(offset),
-                                       tokens.begin() + static_cast<std::ptrdiff_t>(offset + chunk_size));
-                pending_batch_.push_back(std::move(chunk));
+            if (tokens.size() <= max_len) {
+                pending_batch_.push_back(std::move(tokens));
                 sequences_processed_.fetch_add(1);
+            } else {
+                for (size_t offset = 0; offset < tokens.size(); offset += max_len) {
+                    size_t chunk_size = std::min(max_len, tokens.size() - offset);
+                    std::vector<int> chunk(tokens.begin() + static_cast<std::ptrdiff_t>(offset),
+                                           tokens.begin() + static_cast<std::ptrdiff_t>(offset + chunk_size));
+                    pending_batch_.push_back(std::move(chunk));
+                    sequences_processed_.fetch_add(1);
 
-                if (pending_batch_.size() >= config_.batch_size) {
-                    BatchType ready;
-                    ready.swap(pending_batch_);
-                    pending_batch_.reserve(config_.batch_size);
-                    enqueue_batch(std::move(ready));
+                    if (pending_batch_.size() >= config_.batch_size) {
+                        BatchType ready;
+                        ready.swap(pending_batch_);
+                        pending_batch_.reserve(config_.batch_size);
+                        enqueue_batch(std::move(ready));
+                    }
                 }
             }
-        }
 
-        if (pending_batch_.size() >= config_.batch_size) {
-            BatchType ready;
-            ready.swap(pending_batch_);
-            pending_batch_.reserve(config_.batch_size);
-            enqueue_batch(std::move(ready));
+            if (pending_batch_.size() >= config_.batch_size) {
+                BatchType ready;
+                ready.swap(pending_batch_);
+                pending_batch_.reserve(config_.batch_size);
+                enqueue_batch(std::move(ready));
+            }
+        }
+    } else {
+        // Sequential reading: original behavior
+        while (!stop_requested_ && std::getline(corpus_stream_, line)) {
+            std::streampos tell = corpus_stream_.tellg();
+            if (tell >= 0) {
+                bytes_read_.store(static_cast<size_t>(tell));
+            }
+
+            lines_processed_.fetch_add(1);
+
+            if (line.empty()) {
+                continue;
+            }
+
+            auto tokens = tokenizer_.encode(line, false);
+            if (tokens.empty()) {
+                continue;
+            }
+
+            size_t max_len = config_.max_length > 0 ? static_cast<size_t>(config_.max_length)
+                                                    : tokens.size();
+            max_len = std::max<size_t>(1, max_len);
+
+            if (tokens.size() <= max_len) {
+                pending_batch_.push_back(std::move(tokens));
+                sequences_processed_.fetch_add(1);
+            } else {
+                for (size_t offset = 0; offset < tokens.size(); offset += max_len) {
+                    size_t chunk_size = std::min(max_len, tokens.size() - offset);
+                    std::vector<int> chunk(tokens.begin() + static_cast<std::ptrdiff_t>(offset),
+                                           tokens.begin() + static_cast<std::ptrdiff_t>(offset + chunk_size));
+                    pending_batch_.push_back(std::move(chunk));
+                    sequences_processed_.fetch_add(1);
+
+                    if (pending_batch_.size() >= config_.batch_size) {
+                        BatchType ready;
+                        ready.swap(pending_batch_);
+                        pending_batch_.reserve(config_.batch_size);
+                        enqueue_batch(std::move(ready));
+                    }
+                }
+            }
+
+            if (pending_batch_.size() >= config_.batch_size) {
+                BatchType ready;
+                ready.swap(pending_batch_);
+                pending_batch_.reserve(config_.batch_size);
+                enqueue_batch(std::move(ready));
+            }
         }
     }
 
@@ -355,6 +437,45 @@ void StreamingDataLoader::report_prefetch_status(size_t queue_size) {
 
     std::cerr << oss.str() << std::flush;
     prefetch_status_visible_ = true;
+}
+
+void StreamingDataLoader::build_line_index() {
+    std::ifstream index_stream(corpus_path_);
+    if (!index_stream.is_open()) {
+        throw std::runtime_error("Failed to open corpus file for indexing: " + corpus_path_);
+    }
+
+    line_offsets_.clear();
+    line_offsets_.reserve(100000); // Pre-allocate for efficiency
+    
+    std::string line;
+    std::streampos pos = index_stream.tellg();
+    
+    while (std::getline(index_stream, line)) {
+        line_offsets_.push_back(pos);
+        pos = index_stream.tellg();
+    }
+    
+    index_stream.close();
+    line_index_built_ = true;
+    
+    // Initialize line order to sequential
+    line_order_.resize(line_offsets_.size());
+    for (size_t i = 0; i < line_order_.size(); ++i) {
+        line_order_[i] = i;
+    }
+}
+
+void StreamingDataLoader::shuffle_line_order() {
+    if (line_order_.empty()) {
+        return;
+    }
+    
+    // Use a different seed for each epoch
+    std::mt19937 rng(shuffle_seed_);
+    shuffle_seed_ += 1; // Increment for next epoch
+    
+    std::shuffle(line_order_.begin(), line_order_.end(), rng);
 }
 
 } // namespace Utils
