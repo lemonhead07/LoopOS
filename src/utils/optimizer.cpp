@@ -69,6 +69,58 @@ void SGDOptimizer::step(std::vector<Math::Parameter*>& params) {
     }
 }
 
+void SGDOptimizer::save_state(std::ofstream& out) const {
+    // Write learning rate and momentum
+    out.write(reinterpret_cast<const char*>(&learning_rate_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&momentum_), sizeof(float));
+    
+    // Write number of velocity buffers
+    uint32_t num_velocity = static_cast<uint32_t>(velocity_.size());
+    out.write(reinterpret_cast<const char*>(&num_velocity), sizeof(uint32_t));
+    
+    // Write each velocity buffer
+    for (const auto& vel : velocity_) {
+        if (vel) {
+            uint32_t rows = static_cast<uint32_t>(vel->rows());
+            uint32_t cols = static_cast<uint32_t>(vel->cols());
+            out.write(reinterpret_cast<const char*>(&rows), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&cols), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(vel->data()), rows * cols * sizeof(float));
+        } else {
+            uint32_t zero = 0;
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+        }
+    }
+}
+
+void SGDOptimizer::load_state(std::ifstream& in) {
+    // Read learning rate and momentum
+    in.read(reinterpret_cast<char*>(&learning_rate_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&momentum_), sizeof(float));
+    
+    // Read number of velocity buffers
+    uint32_t num_velocity;
+    in.read(reinterpret_cast<char*>(&num_velocity), sizeof(uint32_t));
+    
+    // Read each velocity buffer
+    velocity_.clear();
+    velocity_.reserve(num_velocity);
+    for (uint32_t i = 0; i < num_velocity; ++i) {
+        uint32_t rows, cols;
+        in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+        in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+        
+        if (rows > 0 && cols > 0) {
+            auto vel = Math::MatrixFactory::create(rows, cols);
+            in.read(reinterpret_cast<char*>(vel->data()), rows * cols * sizeof(float));
+            velocity_.push_back(std::move(vel));
+        } else {
+            velocity_.push_back(nullptr);
+        }
+    }
+}
+
 // Adam Optimizer Implementation
 
 AdamOptimizer::AdamOptimizer(float learning_rate, float beta1, float beta2, float epsilon)
@@ -144,6 +196,96 @@ void AdamOptimizer::reset() {
     m_.clear();
     v_.clear();
     step_count_ = 0;
+}
+
+void AdamOptimizer::save_state(std::ofstream& out) const {
+    // Write hyperparameters
+    out.write(reinterpret_cast<const char*>(&learning_rate_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&beta1_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&beta2_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&epsilon_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&step_count_), sizeof(int));
+    
+    // Write number of moment buffers
+    uint32_t num_buffers = static_cast<uint32_t>(m_.size());
+    out.write(reinterpret_cast<const char*>(&num_buffers), sizeof(uint32_t));
+    
+    // Write first moment estimates
+    for (const auto& m : m_) {
+        if (m) {
+            uint32_t rows = static_cast<uint32_t>(m->rows());
+            uint32_t cols = static_cast<uint32_t>(m->cols());
+            out.write(reinterpret_cast<const char*>(&rows), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&cols), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(m->data()), rows * cols * sizeof(float));
+        } else {
+            uint32_t zero = 0;
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+        }
+    }
+    
+    // Write second moment estimates
+    for (const auto& v : v_) {
+        if (v) {
+            uint32_t rows = static_cast<uint32_t>(v->rows());
+            uint32_t cols = static_cast<uint32_t>(v->cols());
+            out.write(reinterpret_cast<const char*>(&rows), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&cols), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(v->data()), rows * cols * sizeof(float));
+        } else {
+            uint32_t zero = 0;
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+        }
+    }
+}
+
+void AdamOptimizer::load_state(std::ifstream& in) {
+    // Read hyperparameters
+    in.read(reinterpret_cast<char*>(&learning_rate_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&beta1_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&beta2_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&epsilon_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&step_count_), sizeof(int));
+    
+    // Read number of moment buffers
+    uint32_t num_buffers;
+    in.read(reinterpret_cast<char*>(&num_buffers), sizeof(uint32_t));
+    
+    // Read first moment estimates
+    m_.clear();
+    m_.reserve(num_buffers);
+    for (uint32_t i = 0; i < num_buffers; ++i) {
+        uint32_t rows, cols;
+        in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+        in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+        
+        if (rows > 0 && cols > 0) {
+            auto m = Math::MatrixFactory::create(rows, cols);
+            in.read(reinterpret_cast<char*>(m->data()), rows * cols * sizeof(float));
+            m_.push_back(std::move(m));
+        } else {
+            m_.push_back(nullptr);
+        }
+    }
+    
+    // Read second moment estimates
+    v_.clear();
+    v_.reserve(num_buffers);
+    for (uint32_t i = 0; i < num_buffers; ++i) {
+        uint32_t rows, cols;
+        in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+        in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+        
+        if (rows > 0 && cols > 0) {
+            auto v = Math::MatrixFactory::create(rows, cols);
+            in.read(reinterpret_cast<char*>(v->data()), rows * cols * sizeof(float));
+            v_.push_back(std::move(v));
+        } else {
+            v_.push_back(nullptr);
+        }
+    }
 }
 
 // AdamW Optimizer Implementation
@@ -224,6 +366,98 @@ void AdamWOptimizer::reset() {
     m_.clear();
     v_.clear();
     step_count_ = 0;
+}
+
+void AdamWOptimizer::save_state(std::ofstream& out) const {
+    // Write hyperparameters
+    out.write(reinterpret_cast<const char*>(&learning_rate_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&beta1_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&beta2_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&epsilon_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&weight_decay_), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&step_count_), sizeof(int));
+    
+    // Write number of moment buffers
+    uint32_t num_buffers = static_cast<uint32_t>(m_.size());
+    out.write(reinterpret_cast<const char*>(&num_buffers), sizeof(uint32_t));
+    
+    // Write first moment estimates
+    for (const auto& m : m_) {
+        if (m) {
+            uint32_t rows = static_cast<uint32_t>(m->rows());
+            uint32_t cols = static_cast<uint32_t>(m->cols());
+            out.write(reinterpret_cast<const char*>(&rows), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&cols), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(m->data()), rows * cols * sizeof(float));
+        } else {
+            uint32_t zero = 0;
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+        }
+    }
+    
+    // Write second moment estimates
+    for (const auto& v : v_) {
+        if (v) {
+            uint32_t rows = static_cast<uint32_t>(v->rows());
+            uint32_t cols = static_cast<uint32_t>(v->cols());
+            out.write(reinterpret_cast<const char*>(&rows), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&cols), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(v->data()), rows * cols * sizeof(float));
+        } else {
+            uint32_t zero = 0;
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+            out.write(reinterpret_cast<const char*>(&zero), sizeof(uint32_t));
+        }
+    }
+}
+
+void AdamWOptimizer::load_state(std::ifstream& in) {
+    // Read hyperparameters
+    in.read(reinterpret_cast<char*>(&learning_rate_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&beta1_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&beta2_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&epsilon_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&weight_decay_), sizeof(float));
+    in.read(reinterpret_cast<char*>(&step_count_), sizeof(int));
+    
+    // Read number of moment buffers
+    uint32_t num_buffers;
+    in.read(reinterpret_cast<char*>(&num_buffers), sizeof(uint32_t));
+    
+    // Read first moment estimates
+    m_.clear();
+    m_.reserve(num_buffers);
+    for (uint32_t i = 0; i < num_buffers; ++i) {
+        uint32_t rows, cols;
+        in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+        in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+        
+        if (rows > 0 && cols > 0) {
+            auto m = Math::MatrixFactory::create(rows, cols);
+            in.read(reinterpret_cast<char*>(m->data()), rows * cols * sizeof(float));
+            m_.push_back(std::move(m));
+        } else {
+            m_.push_back(nullptr);
+        }
+    }
+    
+    // Read second moment estimates
+    v_.clear();
+    v_.reserve(num_buffers);
+    for (uint32_t i = 0; i < num_buffers; ++i) {
+        uint32_t rows, cols;
+        in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+        in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+        
+        if (rows > 0 && cols > 0) {
+            auto v = Math::MatrixFactory::create(rows, cols);
+            in.read(reinterpret_cast<char*>(v->data()), rows * cols * sizeof(float));
+            v_.push_back(std::move(v));
+        } else {
+            v_.push_back(nullptr);
+        }
+    }
 }
 
 // Optimizer Factory Implementation

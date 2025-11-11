@@ -199,6 +199,21 @@ void FineTuner::save_checkpoint(const std::string& path) {
     // Write classification head
     Utils::Serialization::write_matrix(file, *classification_head_.data());
     
+    // Write optimizer state if optimizer is set
+    bool has_optimizer = (optimizer_ != nullptr);
+    file.write(reinterpret_cast<const char*>(&has_optimizer), sizeof(bool));
+    
+    if (has_optimizer) {
+        // Write optimizer type/name
+        std::string opt_name = optimizer_->name();
+        uint32_t name_length = static_cast<uint32_t>(opt_name.size());
+        file.write(reinterpret_cast<const char*>(&name_length), sizeof(uint32_t));
+        file.write(opt_name.c_str(), name_length);
+        
+        // Write optimizer state
+        optimizer_->save_state(file);
+    }
+    
     file.close();
     logger.info("Checkpoint saved successfully");
 }
@@ -235,6 +250,28 @@ void FineTuner::load_checkpoint(const std::string& path) {
     
     // Read classification head
     Utils::Serialization::read_matrix(file, *classification_head_.data());
+    
+    // Read optimizer state if present
+    bool has_optimizer;
+    file.read(reinterpret_cast<char*>(&has_optimizer), sizeof(bool));
+    
+    if (has_optimizer && optimizer_) {
+        // Read optimizer type/name
+        uint32_t name_length;
+        file.read(reinterpret_cast<char*>(&name_length), sizeof(uint32_t));
+        
+        std::string opt_name(name_length, '\0');
+        file.read(&opt_name[0], name_length);
+        
+        // Verify optimizer type matches
+        if (opt_name != optimizer_->name()) {
+            logger.warning("Optimizer type mismatch. Expected: " + optimizer_->name() + 
+                          ", Got: " + opt_name + ". Skipping optimizer state loading.");
+        } else {
+            // Load optimizer state
+            optimizer_->load_state(file);
+        }
+    }
     
     file.close();
     logger.info("Checkpoint loaded successfully");

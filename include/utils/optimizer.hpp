@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <fstream>
 
 namespace LoopOS {
 namespace Utils {
@@ -42,6 +43,16 @@ public:
      * Set learning rate
      */
     virtual void set_learning_rate(float lr) = 0;
+    
+    /**
+     * Save optimizer state to binary stream
+     */
+    virtual void save_state(std::ofstream& out) const = 0;
+    
+    /**
+     * Load optimizer state from binary stream
+     */
+    virtual void load_state(std::ifstream& in) = 0;
 };
 
 /**
@@ -56,6 +67,9 @@ public:
     std::string name() const override { return "SGD"; }
     float get_learning_rate() const override { return learning_rate_; }
     void set_learning_rate(float lr) override { learning_rate_ = lr; }
+    
+    void save_state(std::ofstream& out) const override;
+    void load_state(std::ifstream& in) override;
     
 private:
     float learning_rate_;
@@ -90,6 +104,9 @@ public:
      * Reset optimizer state (clears momentum buffers)
      */
     void reset();
+    
+    void save_state(std::ofstream& out) const override;
+    void load_state(std::ifstream& in) override;
     
 private:
     float learning_rate_;
@@ -133,6 +150,9 @@ public:
      * Reset optimizer state (clears momentum buffers)
      */
     void reset();
+    
+    void save_state(std::ofstream& out) const override;
+    void load_state(std::ifstream& in) override;
     
 private:
     float learning_rate_;
