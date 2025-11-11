@@ -1,418 +1,581 @@
-# Interactive CLI Design for LoopOS
+# LoopOS Command-Line Interface (CLI)
+
+This document provides comprehensive documentation for the LoopOS command-line tools, including the configuration-based CLI and the interactive menu-driven interface.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Command-Line Interface (loop_cli)](#command-line-interface-loop_cli)
+- [Interactive CLI (loop_cli_interactive)](#interactive-cli-loop_cli_interactive)
+- [Configuration Files](#configuration-files)
+- [Common Workflows](#common-workflows)
+- [Troubleshooting](#troubleshooting)
 
 ## Overview
 
-This document outlines the design for an interactive command-line interface (CLI) for LoopOS that will provide a user-friendly, menu-driven experience for training and post-training operations.
+LoopOS provides two primary command-line interfaces:
 
-## Goals
+1. **`loop_cli`** - Configuration-based CLI for running training tasks with JSON configuration files
+2. **`loop_cli_interactive`** - Interactive menu-driven interface for guided configuration and execution
 
-1. **Ease of Use**: Make LoopOS accessible to users without extensive command-line experience
-2. **Discovery**: Help users discover available features and options
-3. **Validation**: Provide immediate feedback on configuration choices
-4. **Progressive Disclosure**: Show only relevant options based on user selections
-5. **Efficiency**: Allow power users to still use command-line arguments for automation
+Both tools provide access to the full range of LoopOS capabilities:
+- Pre-training (Autoregressive, Masked LM, Contrastive Learning)
+- Post-training (Fine-tuning, Chain-of-Thought, RLHF)
+- Text generation from trained models
+- Interactive chatbot interface
+- Tokenizer building
+- System benchmarking
 
-## Design Principles
+## Quick Start
 
-### 1. Menu-Driven Navigation
+### Using the Configuration-Based CLI
 
-```
-┌─────────────────────────────────────────────────┐
-│           LoopOS Interactive CLI                │
-├─────────────────────────────────────────────────┤
-│                                                 │
-│  What would you like to do?                     │
-│                                                 │
-│  1. Pre-training (GPT-style, BERT-style, etc.)  │
-│  2. Post-training (Fine-tuning, CoT, RLHF)      │
-│  3. Text Generation                             │
-│  4. Interactive Chat                            │
-│  5. Build Tokenizer                             │
-│  6. System Benchmarks                           │
-│  7. Configuration Management                    │
-│  8. Exit                                        │
-│                                                 │
-│  Enter choice [1-8]:                            │
-└─────────────────────────────────────────────────┘
-```
+```bash
+# Build the project
+./scripts/build.sh
 
-### 2. Context-Aware Prompts
+# List available configurations
+./build/loop_cli --list-configs
 
-Based on user selections, show relevant sub-menus:
+# Run a training configuration
+./build/loop_cli -c configs/autoregressive_training.json
 
-```
-Post-Training Selected
-────────────────────────────────────────────────
-Choose a post-training method:
+# Validate a configuration before running
+./build/loop_cli --validate configs/fine_tuning.json
 
-  1. Fine-tuning (Classification tasks)
-  2. Chain-of-Thought (Reasoning tasks)
-  3. RLHF (Human preference alignment)
-  4. Back to main menu
-
-Enter choice [1-4]:
+# Generate text from a trained model
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin --length 100
 ```
 
-### 3. Smart Defaults with Override
+### Using the Interactive CLI
 
-```
-Fine-Tuning Configuration
-────────────────────────────────────────────────
-Model Architecture:
-  ✓ d_model: 384 (recommended for i5-1135G7)
-  ✓ num_heads: 8
-  ✓ num_layers: 4
-  ✓ Optimizer: AdamW (state-of-the-art)
-
-Training Parameters:
-  ✓ learning_rate: 0.00001
-  ✓ batch_size: 16
-  ✓ num_epochs: 5
-
-Data:
-  ✗ Training dataset: [NOT SET]
-  ✗ Validation dataset: [NOT SET]
-
-Options:
-  [c] Change configuration
-  [d] Set datasets
-  [s] Start training
-  [q] Quit
+```bash
+# Launch the interactive interface
+./build/loop_cli_interactive
 ```
 
-### 4. Inline Help
+The interactive CLI will guide you through configuration and execution with a menu-driven interface.
 
-```
-Learning Rate: 0.00001
-────────────────────────────────────────────────
-ℹ The learning rate controls how quickly the
-  model adapts to the training data.
+## Command-Line Interface (loop_cli)
 
-  - Too high: Training may be unstable
-  - Too low: Training will be very slow
-  - Recommended: 1e-5 to 1e-4 for fine-tuning
+The `loop_cli` tool provides a traditional command-line interface for running LoopOS tasks using JSON configuration files.
 
-Current value: 0.00001
-Enter new value (or press Enter to keep current):
+### Usage
+
+```bash
+loop_cli [OPTIONS]
 ```
 
-## Feature Breakdown
+### Options
 
-### Main Menu Options
+| Option | Description |
+|--------|-------------|
+| `--config, -c <file>` | Load and execute configuration from JSON file |
+| `--generate <checkpoint>` | Load checkpoint and generate text |
+| `--length <n>` | Number of tokens to generate (default: 50) |
+| `--prompt <ids>` | Comma-separated token IDs for generation (default: 1,2,3) |
+| `--tokenizer <file>` | Path to tokenizer vocabulary (default: outputs/tokenizer.vocab) |
+| `--no-decode` | Show token IDs only, don't decode to text |
+| `--list-configs` | List all available configuration files |
+| `--validate <file>` | Validate configuration file without executing |
+| `--help, -h` | Show help message |
 
-#### 1. Pre-Training
-- Autoregressive (GPT-style)
-- Masked Language Modeling (BERT-style)
-- Contrastive Learning
-- Custom configuration
+### Examples
 
-#### 2. Post-Training
-- **Fine-Tuning**
-  - Dataset selection (JSON/CSV)
-  - Optimizer selection (SGD/Adam/AdamW)
-  - Validation split configuration
-  - Checkpoint frequency
-  
-- **Chain-of-Thought**
-  - Reasoning dataset selection
-  - Step configuration
-  - Generation parameters
-  
-- **RLHF**
-  - Preference dataset selection
-  - Reward model configuration
-  - PPO hyperparameters
+#### List Available Configurations
+
+```bash
+./build/loop_cli --list-configs
+```
+
+Output:
+```
+Available Configuration Files:
+==============================
+
+  - configs/autoregressive_training.json
+    GPT-style autoregressive language modeling
+    Mode: pretraining | Method: autoregressive
+
+  - configs/fine_tuning.json
+    Fine-tuning for classification tasks
+    Mode: posttraining | Method: fine_tuning
+
+  - configs/masked_lm_training.json
+    BERT-style masked language modeling
+    Mode: pretraining | Method: masked_lm
+```
+
+#### Validate a Configuration
+
+```bash
+./build/loop_cli --validate configs/autoregressive_training.json
+```
+
+This will:
+- Load the configuration file
+- Display the configuration summary
+- Validate all parameters
+- Report if the configuration is valid
+
+#### Run Training
+
+```bash
+# Using full option name
+./build/loop_cli --config configs/autoregressive_training.json
+
+# Using shorthand
+./build/loop_cli -c configs/fine_tuning.json
+```
+
+#### Generate Text
+
+```bash
+# Basic generation
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin
+
+# Custom length and prompt
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin \
+  --length 100 \
+  --prompt 1,5,10,15
+
+# Generate without decoding (show token IDs only)
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin \
+  --length 50 \
+  --no-decode
+
+# Use custom tokenizer
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin \
+  --tokenizer data/my_tokenizer.vocab \
+  --length 100
+```
+
+## Interactive CLI (loop_cli_interactive)
+
+The interactive CLI provides a user-friendly, menu-driven interface for configuring and running LoopOS tasks.
+
+### Main Menu
+
+When you launch `loop_cli_interactive`, you'll see:
+
+```
+========================================
+LoopOS Interactive CLI
+========================================
+
+Welcome to the LoopOS Interactive Command-Line Interface!
+This interface will guide you through training and post-training tasks.
+
+========================================
+Main Menu
+========================================
+
+What would you like to do?
+
+  1. Pre-training (GPT-style, BERT-style)
+  2. Post-training (Fine-tuning, CoT, RLHF)
+  3. Text Generation
+  4. Interactive Chat
+  5. Build Tokenizer
+  6. System Benchmarks
+  7. Configuration Management
+  8. Exit
+
+Enter choice [1-8]:
+```
+
+### Features
+
+#### 1. Pre-training
+Configure and run pre-training tasks:
+- Autoregressive (GPT-style) language modeling
+- Masked language modeling (BERT-style)
+- Contrastive learning
+
+#### 2. Post-training
+Configure and run post-training tasks:
+- **Fine-tuning**: Classification and supervised tasks
+- **Chain-of-Thought**: Reasoning-based training
+- **RLHF**: Reinforcement learning from human feedback
 
 #### 3. Text Generation
-- Load checkpoint
-- Set generation parameters (temperature, top-k, top-p)
-- Interactive or batch mode
+Generate text from trained models with configurable parameters.
 
 #### 4. Interactive Chat
-- Load checkpoint
-- Conversation settings
-- Context length
+Launch an interactive chatbot session using a trained model.
 
 #### 5. Build Tokenizer
-- Input data selection
-- Vocabulary size
-- Special tokens
+Create custom tokenizers from your data.
 
 #### 6. System Benchmarks
-- Hardware detection
-- Performance profiling
-- Comparison with baseline
+Run system benchmarks to evaluate hardware capabilities.
 
 #### 7. Configuration Management
-- Save current configuration
-- Load saved configuration
-- Validate configuration
+Manage configuration files:
+- Save configurations
+- Load saved configurations
 - List available configurations
 
-## Implementation Approach
+### Example: Fine-Tuning Workflow
 
-### Phase 1: Core Framework (Week 1)
-
-```cpp
-// Main interactive loop
-class InteractiveCLI {
-public:
-    void run();
-    
-private:
-    void show_main_menu();
-    void handle_pretraining();
-    void handle_posttraining();
-    void handle_generation();
-    void handle_chat();
-    void handle_tokenizer();
-    void handle_benchmarks();
-    void handle_config();
-    
-    // UI helpers
-    int get_menu_choice(int min, int max);
-    std::string get_string_input(const std::string& prompt);
-    float get_float_input(const std::string& prompt, float default_val);
-    bool get_yes_no(const std::string& prompt);
-    
-    // State management
-    Config::Configuration current_config_;
-    std::string current_dataset_;
-};
-```
-
-### Phase 2: Post-Training Wizards (Week 2)
-
-```cpp
-class FineTuningWizard {
-public:
-    Config::Configuration configure();
-    
-private:
-    void select_dataset();
-    void configure_model();
-    void configure_training();
-    void configure_optimizer();
-    void configure_validation();
-    void review_and_start();
-};
-```
-
-### Phase 3: Advanced Features (Week 3)
-
-- Configuration templates
-- Resume training from checkpoint
-- Multi-GPU configuration
-- Distributed training setup
-
-### Phase 4: Polish & UX (Week 4)
-
-- Progress bars and visual feedback
-- Colored output for better readability
-- Error handling and recovery
-- Command history
-- Tab completion (if using readline)
-
-## User Flows
-
-### Example Flow 1: Fine-Tuning Classification
-
-1. User selects "Post-Training" from main menu
-2. User selects "Fine-Tuning"
-3. System shows default configuration
-4. User selects "Set datasets"
-   - Choose training data file (with file browser)
-   - System validates format
-   - Optionally set validation data or use auto-split
-5. User reviews configuration
-6. User starts training
-7. System shows real-time progress:
-   ```
-   Epoch 2/5 [████████░░] 80% | Loss: 0.234 | Acc: 0.89
-   
-   Training metrics:
-   - Current loss: 0.234
-   - Best loss: 0.189 (epoch 1)
-   - Current accuracy: 0.89
-   - Best accuracy: 0.91 (epoch 1)
-   
-   Estimated time remaining: 2m 15s
+1. Start the interactive CLI:
+   ```bash
+   ./build/loop_cli_interactive
    ```
 
-### Example Flow 2: Quick Start with Template
+2. Select option `2` (Post-training)
 
-1. User selects "Configuration Management"
-2. User selects "Load template"
-3. System shows available templates:
-   ```
-   Available Templates:
-   1. Sentiment Analysis (3 classes)
-   2. Question Classification (10 classes)
-   3. Text Classification (custom)
-   4. Reasoning Task (CoT)
-   5. Preference Learning (RLHF)
-   ```
-4. User selects template
-5. System loads configuration with smart defaults
-6. User only needs to specify dataset
-7. Training starts immediately
+3. Select option `1` (Fine-tuning)
 
-## Configuration Persistence
+4. The wizard will prompt you for:
+   - Model architecture (d_model, num_heads, num_layers)
+   - Training parameters (learning_rate, batch_size, num_epochs)
+   - Optimizer selection (SGD, Adam, AdamW)
+   - Data paths (training_data, output_dir)
+
+5. Review the configuration summary
+
+6. Choose to save the configuration and/or start training
+
+## Configuration Files
+
+Configuration files are JSON documents that specify all parameters for a training run.
+
+### Configuration Structure
 
 ```json
 {
-  "interactive_cli": {
-    "recent_configs": [
-      "configs/my_fine_tuning_run_1.json",
-      "configs/my_fine_tuning_run_2.json"
-    ],
-    "favorites": [
-      "configs/sentiment_analysis_template.json"
-    ],
-    "last_dataset": "data/my_training_data.jsonl",
-    "last_checkpoint": "outputs/fine_tuned/checkpoint_epoch_5.bin",
-    "preferences": {
-      "show_inline_help": true,
-      "confirmation_prompts": true,
-      "color_output": true
+  "model": {
+    "type": "transformer",
+    "d_model": 384,
+    "num_heads": 8,
+    "num_layers": 4,
+    "d_ff": 1536,
+    "vocab_size": 16000
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "autoregressive",
+    "description": "GPT-style autoregressive language modeling"
+  },
+  "training": {
+    "learning_rate": 0.0001,
+    "batch_size": 32,
+    "num_epochs": 10,
+    "max_length": 96,
+    "prefetch_batches": 3,
+    "num_workers": 2,
+    "shuffle": true,
+    "regularization": {
+      "dropout": 0.1,
+      "weight_decay": 0.01
     }
+  },
+  "data": {
+    "input_file": "data/pretraining/sample.txt",
+    "output_dir": "outputs/autoregressive"
   }
 }
 ```
 
-## Technical Requirements
+### Configuration Sections
 
-### Dependencies
+#### Model Configuration
 
-- C++17 or later
-- Optional: GNU readline for advanced input handling
-- Optional: ncurses for terminal UI
-- nlohmann/json for configuration
-
-### Compatibility
-
-- Linux (primary target)
-- macOS (secondary)
-- Windows (via WSL)
-
-### Integration Points
-
-- Existing `Config::Configuration` class
-- Existing training executors
-- Existing data loaders
-- Existing metrics tracking
-
-## Testing Strategy
-
-### Unit Tests
-
-- Menu navigation logic
-- Input validation
-- Configuration generation
-
-### Integration Tests
-
-- Complete user flows
-- Configuration saving/loading
-- Training initiation
-
-### User Acceptance Testing
-
-- Usability testing with target users
-- Documentation review
-- Error message clarity
-
-## Future Enhancements
-
-### Version 2.0
-
-- **Web Dashboard**: Browser-based monitoring
-- **Experiment Tracking**: MLflow/W&B integration
-- **Hyperparameter Tuning**: Automated search
-- **Model Comparison**: Side-by-side metrics
-
-### Version 3.0
-
-- **Natural Language Interface**: "Fine-tune on sentiment data"
-- **Guided Troubleshooting**: Diagnostic wizards
-- **Performance Recommendations**: Auto-optimization
-- **Cloud Integration**: Train on remote instances
-
-## Migration Path
-
-### For Existing Users
-
-1. Keep current command-line interface unchanged
-2. Add `--interactive` or `-i` flag to enter interactive mode
-3. Provide conversion utility for old configs
-
-Example:
-```bash
-# Traditional usage (still works)
-./build/loop_cli -c configs/fine_tuning.json
-
-# New interactive mode
-./build/loop_cli --interactive
-
-# Or shorthand
-./build/loop_cli -i
+```json
+"model": {
+  "type": "transformer",           // Model architecture type
+  "d_model": 384,                  // Embedding dimension
+  "num_heads": 8,                  // Number of attention heads
+  "num_layers": 4,                 // Number of transformer layers
+  "d_ff": 1536,                    // Feed-forward dimension
+  "vocab_size": 16000,             // Vocabulary size
+  "num_classes": 10                // Output classes (for classification)
+}
 ```
 
-### For New Users
+#### Computation Configuration
 
-1. Interactive mode becomes the default tutorial
-2. Guide users to command-line for automation
-3. Provide example scripts generated from interactive sessions
+```json
+"computation": {
+  "mode": "pretraining",           // Mode: "pretraining" or "posttraining"
+  "method": "autoregressive",      // Training method
+  "description": "Task description"
+}
+```
 
-## Documentation
+Available methods:
+- **Pre-training**: `autoregressive`, `masked_lm`, `contrastive`
+- **Post-training**: `fine_tuning`, `chain_of_thought`, `rlhf`
 
-### User Guide Sections
+#### Training Configuration
 
-1. **Getting Started with Interactive CLI**
-   - First launch
-   - Navigating menus
-   - Basic training run
+```json
+"training": {
+  "learning_rate": 0.0001,         // Learning rate
+  "batch_size": 32,                // Batch size
+  "num_epochs": 10,                // Number of training epochs
+  "max_length": 96,                // Maximum sequence length
+  "prefetch_batches": 3,           // Number of batches to prefetch
+  "num_workers": 2,                // Number of data loading workers
+  "shuffle": true,                 // Shuffle training data
+  "regularization": {
+    "dropout": 0.1,                // Dropout probability
+    "weight_decay": 0.01           // L2 regularization
+  }
+}
+```
 
-2. **Advanced Configuration**
-   - Custom optimizers
-   - Learning rate schedules
-   - Validation strategies
+#### Adaptive Learning Rate (Optional)
 
-3. **Troubleshooting**
-   - Common errors
-   - Performance issues
-   - Configuration problems
+```json
+"training": {
+  "adaptive_lr": {
+    "enabled": true,
+    "strategy": "cosine_annealing_warm_restarts",
+    "initial_lr": 0.001,
+    "min_lr": 1e-6,
+    "T_0": 5,
+    "T_mult": 2.0
+  }
+}
+```
 
-4. **Reference**
-   - All menu options
-   - Configuration parameters
-   - Keyboard shortcuts
+Available strategies:
+- `step_decay`
+- `exponential_decay`
+- `cosine_annealing`
+- `cosine_annealing_warm_restarts`
+- `one_cycle`
 
-## Success Metrics
+#### Data Configuration
 
-1. **Time to First Training**: < 5 minutes for new users
-2. **Error Rate**: < 5% configuration errors
-3. **User Satisfaction**: > 4.5/5 rating
-4. **Feature Discovery**: > 80% users try 3+ features
-5. **Adoption Rate**: > 60% prefer interactive over command-line
+```json
+"data": {
+  "input_file": "data/train.txt",              // Input data file
+  "output_dir": "outputs/my_model",            // Output directory
+  "pretrained_weights": "models/base.bin",     // Pretrained model (optional)
+  "training_data": "data/train.jsonl",         // Training data (post-training)
+  "validation_data": "data/val.jsonl"          // Validation data (optional)
+}
+```
 
-## Implementation Timeline
+### Example Configurations
 
-| Phase | Duration | Deliverables |
-|-------|----------|--------------|
-| Phase 1 | 1 week | Core framework, main menu |
-| Phase 2 | 1 week | Post-training wizards |
-| Phase 3 | 1 week | Advanced features |
-| Phase 4 | 1 week | Polish, testing, docs |
-| **Total** | **4 weeks** | **Production-ready interactive CLI** |
+#### Pre-training: Autoregressive
 
-## Conclusion
+```json
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 384,
+    "num_heads": 8,
+    "num_layers": 4,
+    "d_ff": 1536
+  },
+  "computation": {
+    "mode": "pretraining",
+    "method": "autoregressive",
+    "description": "GPT-style autoregressive language modeling"
+  },
+  "training": {
+    "adaptive_lr": {
+      "enabled": true,
+      "strategy": "cosine_annealing_warm_restarts",
+      "initial_lr": 0.001,
+      "min_lr": 1e-6,
+      "T_0": 5,
+      "T_mult": 2.0
+    },
+    "max_length": 96,
+    "batch_size": 8,
+    "num_epochs": 50,
+    "regularization": {
+      "dropout": 0.1,
+      "weight_decay": 0.01
+    }
+  },
+  "data": {
+    "input_file": "data/pretraining/text/sample.txt",
+    "output_dir": "outputs/autoregressive"
+  }
+}
+```
 
-This interactive CLI will significantly lower the barrier to entry for LoopOS while maintaining the flexibility and power that advanced users require. The menu-driven interface combined with smart defaults and inline help will make post-training accessible to researchers, students, and practitioners with varying levels of experience.
+#### Post-training: Fine-tuning
+
+```json
+{
+  "model": {
+    "type": "transformer",
+    "d_model": 384,
+    "num_heads": 8,
+    "num_layers": 4,
+    "d_ff": 1536,
+    "vocab_size": 16000,
+    "num_classes": 10
+  },
+  "computation": {
+    "mode": "posttraining",
+    "method": "fine_tuning",
+    "description": "Fine-tuning for classification tasks"
+  },
+  "training": {
+    "learning_rate": 0.00001,
+    "batch_size": 16,
+    "num_epochs": 5
+  },
+  "data": {
+    "pretrained_weights": "models/pretrained_model.bin",
+    "training_data": "data/classification_train.txt",
+    "output_dir": "outputs/fine_tuned"
+  }
+}
+```
+
+## Common Workflows
+
+### Workflow 1: Pre-training from Scratch
+
+```bash
+# 1. Build the project
+./scripts/build.sh
+
+# 2. Prepare your training data
+# Place text data in data/pretraining/text/
+
+# 3. Create or modify a configuration file
+# Edit configs/autoregressive_training.json
+
+# 4. Validate the configuration
+./build/loop_cli --validate configs/autoregressive_training.json
+
+# 5. Start training
+./build/loop_cli -c configs/autoregressive_training.json
+
+# 6. Monitor logs
+tail -f logs/loop_cli_*.log
+```
+
+### Workflow 2: Fine-tuning a Pre-trained Model
+
+```bash
+# 1. Ensure you have a pre-trained model checkpoint
+# e.g., outputs/autoregressive/model_checkpoint.bin
+
+# 2. Prepare classification data
+# Format: label\ttext per line
+
+# 3. Update fine-tuning configuration
+# Edit configs/fine_tuning.json
+# Set "pretrained_weights" to your checkpoint path
+
+# 4. Run fine-tuning
+./build/loop_cli -c configs/fine_tuning.json
+```
+
+### Workflow 3: Generate Text from Trained Model
+
+```bash
+# Generate text using default settings
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin
+
+# Generate longer sequences with custom prompt
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin \
+  --length 200 \
+  --prompt 1,10,20
+
+# Use with custom tokenizer
+./build/loop_cli --generate outputs/autoregressive/model_checkpoint.bin \
+  --tokenizer outputs/my_tokenizer.vocab \
+  --length 100
+```
+
+### Workflow 4: Interactive Configuration
+
+```bash
+# Launch interactive CLI
+./build/loop_cli_interactive
+
+# Follow the prompts:
+# 1. Select "Post-training"
+# 2. Select "Fine-tuning"
+# 3. Configure model and training parameters
+# 4. Save configuration as configs/my_fine_tuning.json
+# 5. Start training or exit and run:
+
+./build/loop_cli -c configs/my_fine_tuning.json
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Configuration File Not Found
+
+```
+Error: Could not open configuration file: configs/my_config.json
+```
+
+**Solution**: Ensure the configuration file exists and the path is correct. Use `--list-configs` to see available configurations.
+
+#### Invalid Configuration
+
+```
+Error: Configuration validation failed
+```
+
+**Solution**: Use `--validate` to check your configuration and see specific validation errors:
+```bash
+./build/loop_cli --validate configs/my_config.json
+```
+
+#### Missing Data File
+
+```
+Error: Could not open input file: data/train.txt
+```
+
+**Solution**: Verify the `input_file` or `training_data` path in your configuration points to an existing file.
+
+#### Out of Memory
+
+```
+Error: Failed to allocate memory for matrix
+```
+
+**Solution**: 
+- Reduce `batch_size` in your configuration
+- Reduce `d_model`, `num_layers`, or `max_length`
+- Close other applications to free memory
+
+#### Model Checkpoint Not Found
+
+```
+Error: Could not load checkpoint: outputs/model.bin
+```
+
+**Solution**: Ensure the checkpoint file exists. For fine-tuning, make sure you've completed pre-training first.
+
+### Getting Help
+
+- View command-line help: `./build/loop_cli --help`
+- Check logs in `logs/` directory for detailed error messages
+- Review configuration examples in `configs/` directory
+- See [docs/CLI_EXAMPLES.md](docs/CLI_EXAMPLES.md) for more examples
+- See [docs/POST_TRAINING_GUIDE.md](docs/POST_TRAINING_GUIDE.md) for post-training details
+
+## Additional Resources
+
+- **[QUICKSTART.md](QUICKSTART.md)** - Quick start guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Architecture overview
+- **[docs/CLI_EXAMPLES.md](docs/CLI_EXAMPLES.md)** - Extended CLI examples
+- **[docs/POST_TRAINING_GUIDE.md](docs/POST_TRAINING_GUIDE.md)** - Post-training methods
+- **[docs/POST_TRAINING_DATA_FORMATS.md](docs/POST_TRAINING_DATA_FORMATS.md)** - Data format specifications
+- **[ADAPTIVE_LR_GUIDE.md](ADAPTIVE_LR_GUIDE.md)** - Adaptive learning rate guide
 
 ---
 
-**Document Version**: 1.0  
 **Last Updated**: November 11, 2025  
-**Author**: LoopOS Development Team  
-**Status**: Design Proposal
+**Version**: 1.0
