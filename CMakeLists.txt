@@ -143,8 +143,10 @@ if(USE_CUDA)
         src/math/cuda_matrix.cpp
         src/math/cuda_kernels.cu
     )
-    add_library(math_backend STATIC ${MATH_SOURCES})
+    # Build as SHARED so CUDA device linking works correctly across targets
+    add_library(math_backend SHARED ${MATH_SOURCES})
     set_target_properties(math_backend PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    set_target_properties(math_backend PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(math_backend utils OpenMP::OpenMP_CXX ${OpenCL_LIBRARIES} ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} pthread)
 else()
     add_library(math_backend STATIC ${MATH_SOURCES})
