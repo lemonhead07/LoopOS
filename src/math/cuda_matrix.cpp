@@ -36,7 +36,7 @@ extern "C" {
 void CUDAMatrix::check_cuda_error(cudaError_t error, const char* msg) {
     if (error != cudaSuccess) {
         std::string error_msg = std::string(msg) + ": " + cudaGetErrorString(error);
-        Utils::Logger::error("CUDA", error_msg);
+        Utils::Logger::instance().error("CUDA", error_msg);
         cudaGetLastError(); // Clear sticky error state
         throw std::runtime_error(error_msg);
     }
@@ -45,7 +45,7 @@ void CUDAMatrix::check_cuda_error(cudaError_t error, const char* msg) {
 void CUDAMatrix::check_cublas_error(cublasStatus_t status, const char* msg) {
     if (status != CUBLAS_STATUS_SUCCESS) {
         std::string error_msg = std::string(msg) + ": cuBLAS error " + std::to_string(status);
-        Utils::Logger::error("CUDA", error_msg);
+        Utils::Logger::instance().error("CUDA", error_msg);
         throw std::runtime_error(error_msg);
     }
 }
@@ -60,7 +60,7 @@ void CUDAMatrix::initialize_cuda() {
     int device_count = 0;
     cudaError_t error = cudaGetDeviceCount(&device_count);
     if (error != cudaSuccess || device_count == 0) {
-        Utils::Logger::error("CUDA", "No CUDA devices found");
+        Utils::Logger::instance().error("CUDA", "No CUDA devices found");
         throw std::runtime_error("No CUDA devices found");
     }
     
@@ -71,16 +71,16 @@ void CUDAMatrix::initialize_cuda() {
     check_cuda_error(cudaGetDeviceProperties(&device_props_, device_id_), 
                      "Failed to get device properties");
     
-    Utils::Logger::info("CUDA", "CUDA Device: " + std::string(device_props_.name));
-    Utils::Logger::info("CUDA", "Compute Capability: " + std::to_string(device_props_.major) + "." + 
+    Utils::Logger::instance().info("CUDA", "CUDA Device: " + std::string(device_props_.name));
+    Utils::Logger::instance().info("CUDA", "Compute Capability: " + std::to_string(device_props_.major) + "." + 
                        std::to_string(device_props_.minor));
-    Utils::Logger::info("CUDA", "Total Memory: " + std::to_string(device_props_.totalGlobalMem / (1024*1024)) + " MB");
+    Utils::Logger::instance().info("CUDA", "Total Memory: " + std::to_string(device_props_.totalGlobalMem / (1024*1024)) + " MB");
     
     // Create cuBLAS handle
     check_cublas_error(cublasCreate(&cublas_handle_), "Failed to create cuBLAS handle");
     
     cuda_initialized_ = true;
-    Utils::Logger::info("CUDA", "CUDA initialized successfully");
+    Utils::Logger::instance().info("CUDA", "CUDA initialized successfully");
 }
 
 void CUDAMatrix::cleanup_cuda() {
@@ -91,7 +91,7 @@ void CUDAMatrix::cleanup_cuda() {
     cublasDestroy(cublas_handle_);
     cudaDeviceReset();
     cuda_initialized_ = false;
-    Utils::Logger::info("CUDA", "CUDA cleaned up");
+    Utils::Logger::instance().info("CUDA", "CUDA cleaned up");
 }
 
 bool CUDAMatrix::is_available() {
