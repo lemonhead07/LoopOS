@@ -22,40 +22,70 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 
 ## Quick Start
 
-### Fresh Installation (WSL/Linux)
+### Fresh WSL/Linux Installation
 
-If you're setting up LoopOS on a brand new WSL box or Linux machine:
+**New to LoopOS? Start here! 🚀**
 
+If you're setting up LoopOS on a brand new WSL or Linux machine, we have a dedicated setup guide:
+
+👉 **See [wsl-setup/README.md](wsl-setup/README.md) for complete WSL installation instructions**
+
+**Quick install:**
 ```bash
-# One-command installation (installs all dependencies and builds)
-./scripts/install_wsl.sh
+# Clone repository
+git clone https://github.com/lemonhead07/LoopOS.git
+cd LoopOS
 
-# With CUDA support for NVIDIA GPU acceleration
-./scripts/install_wsl.sh --with-cuda
+# Run setup (installs all dependencies and builds)
+./wsl-setup/install.sh
 
-# Just install dependencies without building
-./scripts/install_wsl.sh --skip-build
+# Or with CUDA support for NVIDIA GPU
+./wsl-setup/install.sh --with-cuda
 ```
 
-The installation script will:
-- Update your system
-- Install build tools (cmake, gcc, g++)
-- Install required libraries (OpenMP, OpenCL)
-- Optionally install CUDA toolkit
-- Clone/update the repository to ~/LoopOS
-- Build the project with optimizations
+### Already Have Dependencies?
 
-### Build (if already have dependencies)
+If you already have the build tools and dependencies installed:
+
+### Already Have Dependencies?
+
+If you already have the build tools and dependencies installed:
 
 ```bash
-# Build with auto-detected optimizations (recommended)
-./scripts/build_unified.sh
+# Quick build
+./loop build
 
-# Or use the basic build script
-./scripts/build.sh
+# Or build with auto-detected optimizations (recommended)
+./loop build-optimized
 ```
 
-### Run Examples
+### Using LoopOS
+
+The easiest way to use LoopOS is through the `./loop` wrapper:
+
+```bash
+# Show help and available commands
+./loop help
+
+# Check system status
+./loop status
+
+# Run a quick test
+./loop test
+
+# Train a model
+./loop train configs/autoregressive_tiny.json
+
+# Start interactive chat
+./loop chat
+
+# List available configs
+./loop configs
+```
+
+### Traditional CLI (Advanced)
+
+You can also use the executables directly:
 
 ```bash
 # Simple CLI (easiest - recommended!)
