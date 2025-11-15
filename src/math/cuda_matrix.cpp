@@ -37,6 +37,7 @@ void CUDAMatrix::check_cuda_error(cudaError_t error, const char* msg) {
     if (error != cudaSuccess) {
         std::string error_msg = std::string(msg) + ": " + cudaGetErrorString(error);
         Utils::Logger::error(error_msg);
+        cudaGetLastError(); // Clear sticky error state
         throw std::runtime_error(error_msg);
     }
 }

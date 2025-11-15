@@ -16,11 +16,11 @@ if(USE_CUDA)
         set(CMAKE_CUDA_STANDARD 17)
         set(CMAKE_CUDA_STANDARD_REQUIRED ON)
         
-        # CUDA architecture selection (optimized for GTX 1080 TI - Pascal architecture)
+        # CUDA architecture selection (optimized for RTX 3070 - Ampere architecture)
         # Pascal = sm_61, Turing = sm_75, Ampere = sm_86, Ada = sm_89
         if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-            set(CMAKE_CUDA_ARCHITECTURES 61)  # GTX 1080 TI
-            message(STATUS "CUDA architectures set to sm_61 (Pascal - GTX 1080 TI)")
+            set(CMAKE_CUDA_ARCHITECTURES 86)  # RTX 3070
+            message(STATUS "CUDA architectures set to sm_86 (Ampere - RTX 3070)")
         endif()
         
         add_definitions(-DUSE_CUDA)

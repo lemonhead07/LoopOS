@@ -172,7 +172,7 @@ Available backends:
 - `CPU_NAIVE` - Simple C++ implementation
 - `CPU_OPTIMIZED` - AVX2/AVX-512 SIMD optimized (recommended for CPU)
 - `OPENCL` - OpenCL GPU acceleration
-- `CUDA` - NVIDIA CUDA GPU acceleration (GTX 1080 TI optimized) ✨ NEW!
+- `CUDA` - NVIDIA CUDA GPU acceleration (RTX 3070 optimized) ✨ NEW!
 - `BLAS` - BLAS/LAPACK (planned)
 
 ### CUDA GPU Acceleration
@@ -183,7 +183,7 @@ Train models 5-10× faster with CUDA support:
 # Build with CUDA support
 ./scripts/build_cuda.sh
 
-# Train on Wikipedia with CUDA (optimized for GTX 1080 TI - 11GB)
+# Train on Wikipedia with CUDA (optimized for RTX 3070 - 8GB)
 ./scripts/train_wiki_cuda.sh
 
 # Test with sample
@@ -199,7 +199,7 @@ See [docs/CUDA_TRAINING.md](docs/CUDA_TRAINING.md) for complete CUDA documentati
 - OpenMP support
 - Linux (for hardware detection features)
 - Optional: CPU with AVX2 (2013+) or AVX-512 support
-- Optional: NVIDIA GPU with CUDA support (GTX 1080 TI or newer recommended)
+- Optional: NVIDIA GPU with CUDA support (RTX 3070 or compatible recommended)
 
 ## License
 

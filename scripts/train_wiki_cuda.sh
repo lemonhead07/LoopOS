@@ -1,6 +1,6 @@
 #!/bin/bash
 # Train transformer on Wikipedia dataset using CUDA acceleration
-# Optimized for GTX 1080 TI with 11GB VRAM
+# Optimized for RTX 3070 with 8GB VRAM
 # Handles the full Wikipedia corpus with memory optimization
 
 set -e  # Exit on error
@@ -12,12 +12,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration optimized for 11GB GPU
+# Configuration optimized for 8GB GPU
 WIKI_DIR="data/pretraining/wiki/fullEnglish"
 OUTPUT_DIR="outputs/wiki_training_cuda"
 VOCAB_SIZE=50000
 MIN_FREQ=5
-BATCH_SIZE=16          # Reduced for 11GB GPU
+BATCH_SIZE=12          # Reduced for 8GB GPU
 EPOCHS=3
 MAX_LENGTH=256         # Optimized for memory
 LEARNING_RATE=0.0001
@@ -98,14 +98,14 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Train transformer on Wikipedia dataset with CUDA acceleration"
-            echo "Optimized for GTX 1080 TI (11GB VRAM)"
+            echo "Optimized for RTX 3070 (8GB VRAM)"
             echo ""
             echo "Options:"
             echo "  --skip-vocab         Skip vocabulary building (use existing vocab)"
             echo "  --config-only        Only create config file, don't train"
             echo "  --vocab-size SIZE    Maximum vocabulary size (default: 50000)"
             echo "  --min-freq N         Minimum word frequency (default: 5)"
-            echo "  --batch-size N       Training batch size (default: 16 for 11GB GPU)"
+            echo "  --batch-size N       Training batch size (default: 12 for 8GB GPU)"
             echo "  --epochs N           Number of training epochs (default: 3)"
             echo "  --max-length N       Maximum sequence length (default: 256)"
             echo "  --lr RATE            Learning rate (default: 0.0001)"
@@ -119,7 +119,7 @@ while [[ $# -gt 0 ]]; do
             echo "Examples:"
             echo "  $0                              # Full training with CUDA"
             echo "  $0 --sample 100                 # Test with 100 files"
-            echo "  $0 --batch-size 32              # Increase batch size (needs more VRAM)"
+            echo "  $0 --batch-size 16              # Increase batch size (needs more VRAM)"
             echo "  $0 --num-layers 12              # Larger model (needs more VRAM)"
             exit 0
             ;;
@@ -133,7 +133,7 @@ done
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}Wikipedia CUDA Training${NC}"
-echo -e "${BLUE}GTX 1080 TI (11GB) Optimized${NC}"
+echo -e "${BLUE}RTX 3070 (8GB) Optimized${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -153,8 +153,8 @@ if command -v nvidia-smi &> /dev/null; then
     echo ""
     
     # Warn if memory is low
-    if [ "$FREE_MEM" -lt 8000 ]; then
-        echo -e "${YELLOW}Warning: Less than 8GB GPU memory available${NC}"
+    if [ "$FREE_MEM" -lt 6000 ]; then
+        echo -e "${YELLOW}Warning: Less than 6GB GPU memory available${NC}"
         echo -e "${YELLOW}Consider reducing batch size or model size${NC}"
         echo ""
     fi
@@ -284,12 +284,18 @@ echo ""
 echo -e "${GREEN}✓ Configuration created${NC}"
 echo ""
 
-# Memory estimation
-ESTIMATED_MEMORY=$(( (D_MODEL * D_MODEL * NUM_LAYERS * 4 * 3) / 1024 / 1024 ))
-echo -e "${BLUE}Memory Estimation:${NC}"
-echo -e "  Model parameters: ~${YELLOW}$ESTIMATED_MEMORY${NC} MB"
-echo -e "  Batch size: ${YELLOW}$BATCH_SIZE${NC}"
-echo -e "  Sequence length: ${YELLOW}$MAX_LENGTH${NC}"
+# Memory estimation (simplified - actual usage may vary)
+# Model parameters: weights + biases
+ESTIMATED_MODEL_PARAMS=$(( (D_MODEL * D_MODEL * NUM_LAYERS * 4 * 3) / 1024 / 1024 ))
+# Activations: approximate per-batch memory
+ESTIMATED_ACTIVATIONS=$(( (BATCH_SIZE * MAX_LENGTH * D_MODEL * NUM_LAYERS * 4) / 1024 / 1024 ))
+ESTIMATED_TOTAL_MEMORY=$(( ESTIMATED_MODEL_PARAMS + ESTIMATED_ACTIVATIONS ))
+
+echo -e "${BLUE}Memory Estimation (approximate):${NC}"
+echo -e "  Model parameters: ~${YELLOW}$ESTIMATED_MODEL_PARAMS${NC} MB"
+echo -e "  Activations (per batch): ~${YELLOW}$ESTIMATED_ACTIVATIONS${NC} MB"
+echo -e "  Estimated total: ~${YELLOW}$ESTIMATED_TOTAL_MEMORY${NC} MB (excludes gradients, optimizer states)"
+echo -e "  ${YELLOW}Note: This is a simplified estimate. Actual memory usage may be higher.${NC}"
 echo ""
 
 if [ "$CONFIG_ONLY" = true ]; then

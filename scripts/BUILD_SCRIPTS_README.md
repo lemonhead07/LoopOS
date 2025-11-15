@@ -4,18 +4,18 @@ This directory contains build scripts optimized for different CPU instruction se
 
 ## Available Build Scripts
 
-### 1. `build_cuda.sh` - CUDA GPU Build (Fastest - GTX 1080 TI Optimized) ⚡
+### 1. `build_cuda.sh` - CUDA GPU Build (Fastest - RTX 3070 Optimized) ⚡
 
 **Use this for:**
 - Training with NVIDIA GPU acceleration
 - 5-10× faster than CPU-only builds
-- GTX 1080 TI and newer GPUs
+- RTX 3070 and compatible GPUs
 - Maximum performance on large models
 
 **Requirements:**
-- NVIDIA GPU (GTX 1080 TI or compatible)
-- CUDA Toolkit 10.0+
-- 11GB+ VRAM recommended
+- NVIDIA GPU (RTX 3070 or compatible)
+- CUDA Toolkit 11.0+
+- 8GB+ VRAM recommended
 
 **Usage:**
 ```bash

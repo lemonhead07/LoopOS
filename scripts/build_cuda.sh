@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build script for CUDA-enabled LoopOS
-# Optimized for NVIDIA GTX 1080 TI (Pascal architecture, 11GB VRAM)
+# Optimized for NVIDIA RTX 3070 (Ampere architecture, 8GB VRAM)
 
 set -e  # Exit on error
 
@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}LoopOS CUDA Build Script${NC}"
-echo -e "${BLUE}Optimized for GTX 1080 TI (11GB)${NC}"
+echo -e "${BLUE}Optimized for RTX 3070 (8GB)${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -103,7 +103,7 @@ echo -e "${GREEN}Configuring CMake with CUDA support...${NC}"
 echo -e "  Build type: ${YELLOW}${BUILD_TYPE}${NC}"
 echo -e "  AVX-512: ${YELLOW}${AVX512_ENABLED}${NC}"
 echo -e "  CUDA: ${YELLOW}ON${NC}"
-echo -e "  CUDA Architecture: ${YELLOW}sm_61 (Pascal - GTX 1080 TI)${NC}"
+echo -e "  CUDA Architecture: ${YELLOW}sm_86 (Ampere - RTX 3070)${NC}"
 echo ""
 
 # Configure with CMake
@@ -111,7 +111,7 @@ cmake .. \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DENABLE_AVX512="$AVX512_ENABLED" \
     -DUSE_CUDA=ON \
-    -DCMAKE_CUDA_ARCHITECTURES=61
+    -DCMAKE_CUDA_ARCHITECTURES=86
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}CMake configuration failed!${NC}"

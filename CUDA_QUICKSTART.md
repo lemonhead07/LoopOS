@@ -18,7 +18,7 @@ nvcc --version
 ## Build with CUDA
 
 ```bash
-# Standard CUDA build (GTX 1080 TI optimized)
+# Standard CUDA build (RTX 3070 optimized)
 ./scripts/build_cuda.sh
 
 # With AVX-512 CPU optimizations too
@@ -28,28 +28,34 @@ nvcc --version
 ## Train on Wikipedia
 
 ```bash
-# Full training (optimized for 11GB GPU)
+# Full training (optimized for 8GB GPU)
 ./scripts/train_wiki_cuda.sh
 
 # Test with sample first (recommended)
 ./scripts/train_wiki_cuda.sh --sample 100 --epochs 1
 
 # Custom configuration
-./scripts/train_wiki_cuda.sh --batch-size 16 --max-length 256 --epochs 3
+./scripts/train_wiki_cuda.sh --batch-size 12 --max-length 256 --epochs 3
 ```
 
 ## Memory Configuration
 
-**For 11GB GPU (GTX 1080 TI):**
+**For 8GB GPU (RTX 3070) - Default:**
 ```bash
 # Safe configuration (default)
-./scripts/train_wiki_cuda.sh --batch-size 16 --d-model 512 --num-layers 6
+./scripts/train_wiki_cuda.sh --batch-size 12 --d-model 512 --num-layers 6
 ```
 
-**For 8GB GPU:**
+**For 6GB GPU:**
 ```bash
 # Reduced configuration
 ./scripts/train_wiki_cuda.sh --batch-size 8 --d-model 384 --num-layers 4
+```
+
+**For 12GB+ GPU (RTX 3080 TI/4070):**
+```bash
+# Medium configuration
+./scripts/train_wiki_cuda.sh --batch-size 16 --d-model 512 --num-layers 8
 ```
 
 **For 24GB GPU (RTX 3090/4090):**
@@ -115,5 +121,5 @@ See [docs/CUDA_TRAINING.md](docs/CUDA_TRAINING.md) for complete guide.
 
 ---
 
-**Optimized for:** NVIDIA GTX 1080 TI (11GB VRAM, Pascal sm_61)  
+**Optimized for:** NVIDIA RTX 3070 (8GB VRAM, Ampere sm_86)  
 **Also works with:** RTX 20/30/40 series, GTX 10 series, and other CUDA-capable GPUs

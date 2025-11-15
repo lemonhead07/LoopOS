@@ -95,6 +95,8 @@ __global__ void transpose_kernel(const float* input, float* output, size_t rows,
 }
 
 // CUDA kernel for softmax (row-wise by default)
+// NOTE: This kernel assumes input and output do not alias (point to the same memory).
+// If they do alias, the normalization loop will read incorrect values written by the exp loop.
 __global__ void softmax_kernel(const float* input, float* output, size_t rows, size_t cols) {
     size_t row = blockIdx.x * blockDim.x + threadIdx.x;
     
@@ -152,77 +154,67 @@ void cuda_elementwise_add(const float* a, const float* b, float* result, size_t 
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     elementwise_add_kernel<<<blocks, threads>>>(a, b, result, size);
-    cudaDeviceSynchronize();
+    // Note: No sync here - will sync when CPU needs results (e.g., in ensure_host_valid)
 }
 
 void cuda_elementwise_subtract(const float* a, const float* b, float* result, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     elementwise_subtract_kernel<<<blocks, threads>>>(a, b, result, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_elementwise_multiply(const float* a, const float* b, float* result, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     elementwise_multiply_kernel<<<blocks, threads>>>(a, b, result, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_scalar_multiply(const float* a, float scalar, float* result, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     scalar_multiply_kernel<<<blocks, threads>>>(a, scalar, result, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_fill(float* data, float value, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     fill_kernel<<<blocks, threads>>>(data, value, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_relu(const float* input, float* output, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     relu_kernel<<<blocks, threads>>>(input, output, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_sigmoid(const float* input, float* output, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     sigmoid_kernel<<<blocks, threads>>>(input, output, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_tanh_kernel(const float* input, float* output, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     tanh_activation_kernel<<<blocks, threads>>>(input, output, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_sqrt_kernel(const float* input, float* output, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     sqrt_operation_kernel<<<blocks, threads>>>(input, output, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_pow_kernel(const float* input, float* output, float exponent, size_t size) {
     const int threads = 256;
     const int blocks = (size + threads - 1) / threads;
     pow_operation_kernel<<<blocks, threads>>>(input, output, exponent, size);
-    cudaDeviceSynchronize();
 }
 
 void cuda_transpose(const float* input, float* output, size_t rows, size_t cols) {
     dim3 threads(16, 16);
     dim3 blocks((cols + 15) / 16, (rows + 15) / 16);
     transpose_kernel<<<blocks, threads>>>(input, output, rows, cols);
-    cudaDeviceSynchronize();
 }
 
 void cuda_softmax(const float* input, float* output, size_t rows, size_t cols, int dim) {
@@ -230,7 +222,6 @@ void cuda_softmax(const float* input, float* output, size_t rows, size_t cols, i
     const int threads = 256;
     const int blocks = (rows + threads - 1) / threads;
     softmax_kernel<<<blocks, threads>>>(input, output, rows, cols);
-    cudaDeviceSynchronize();
 }
 
 float cuda_sum(const float* data, size_t size) {
@@ -239,25 +230,61 @@ float cuda_sum(const float* data, size_t size) {
     
     // Allocate device memory for partial sums
     float* d_partial_sums;
-    cudaMalloc(&d_partial_sums, blocks * sizeof(float));
+    cudaError_t err = cudaMalloc(&d_partial_sums, blocks * sizeof(float));
+    if (err != cudaSuccess) {
+        printf("CUDA malloc error (d_partial_sums): %s\n", cudaGetErrorString(err));
+        return 0.0f;
+    }
     
     // First reduction
     sum_reduce_kernel<<<blocks, threads, threads * sizeof(float)>>>(data, d_partial_sums, size);
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA kernel launch error (sum_reduce_kernel): %s\n", cudaGetErrorString(err));
+        cudaFree(d_partial_sums);
+        return 0.0f;
+    }
     
     // If we have multiple blocks, reduce again
     if (blocks > 1) {
         float* d_final_sum;
-        cudaMalloc(&d_final_sum, sizeof(float));
+        err = cudaMalloc(&d_final_sum, sizeof(float));
+        if (err != cudaSuccess) {
+            printf("CUDA malloc error (d_final_sum): %s\n", cudaGetErrorString(err));
+            cudaFree(d_partial_sums);
+            return 0.0f;
+        }
+        
         sum_reduce_kernel<<<1, threads, threads * sizeof(float)>>>(d_partial_sums, d_final_sum, blocks);
+        err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("CUDA kernel launch error (sum_reduce_kernel final): %s\n", cudaGetErrorString(err));
+            cudaFree(d_final_sum);
+            cudaFree(d_partial_sums);
+            return 0.0f;
+        }
         
         float result;
-        cudaMemcpy(&result, d_final_sum, sizeof(float), cudaMemcpyDeviceToHost);
+        err = cudaMemcpy(&result, d_final_sum, sizeof(float), cudaMemcpyDeviceToHost);
+        if (err != cudaSuccess) {
+            printf("CUDA memcpy error (final result): %s\n", cudaGetErrorString(err));
+            cudaFree(d_final_sum);
+            cudaFree(d_partial_sums);
+            return 0.0f;
+        }
+        
         cudaFree(d_final_sum);
         cudaFree(d_partial_sums);
         return result;
     } else {
         float result;
-        cudaMemcpy(&result, d_partial_sums, sizeof(float), cudaMemcpyDeviceToHost);
+        err = cudaMemcpy(&result, d_partial_sums, sizeof(float), cudaMemcpyDeviceToHost);
+        if (err != cudaSuccess) {
+            printf("CUDA memcpy error (single block result): %s\n", cudaGetErrorString(err));
+            cudaFree(d_partial_sums);
+            return 0.0f;
+        }
+        
         cudaFree(d_partial_sums);
         return result;
     }

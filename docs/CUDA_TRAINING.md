@@ -1,13 +1,13 @@
 # CUDA Training Module for LoopOS
 
-Complete CUDA GPU acceleration support for LoopOS, optimized for NVIDIA GTX 1080 TI with 11GB VRAM.
+Complete CUDA GPU acceleration support for LoopOS, optimized for NVIDIA RTX 3070 with 8GB VRAM.
 
 ## Features
 
 - **CUDA Backend**: Full GPU acceleration using CUDA and cuBLAS
-- **Memory Optimized**: Designed for 11GB VRAM constraint (GTX 1080 TI)
+- **Memory Optimized**: Designed for 8GB VRAM constraint (RTX 3070)
 - **Lazy Synchronization**: Minimal CPU-GPU data transfers
-- **Pascal Architecture**: Optimized for sm_61 (GTX 1080 TI compute capability)
+- **Ampere Architecture**: Optimized for sm_86 (RTX 3070 compute capability)
 - **Wikipedia Training**: Specialized script for large-scale training
 - **Memory Monitoring**: Real-time GPU memory usage tracking
 
@@ -16,8 +16,8 @@ Complete CUDA GPU acceleration support for LoopOS, optimized for NVIDIA GTX 1080
 ### 1. Prerequisites
 
 **Required:**
-- NVIDIA GPU (GTX 1080 TI or compatible)
-- CUDA Toolkit (10.0+)
+- NVIDIA GPU (RTX 3070 or compatible)
+- CUDA Toolkit (11.0+)
 - cuBLAS library
 - nvidia-smi utility
 
@@ -65,7 +65,7 @@ Executables are in: build_cuda/
 ### 3. Train on Wikipedia with CUDA
 
 ```bash
-# Full Wikipedia training (optimized for 11GB GPU)
+# Full Wikipedia training (optimized for 8GB GPU)
 ./scripts/train_wiki_cuda.sh
 
 # Test with sample (100 files)
@@ -73,6 +73,11 @@ Executables are in: build_cuda/
 
 # Custom configuration
 ./scripts/train_wiki_cuda.sh \
+  --batch-size 12 \
+  --max-length 256 \
+  --num-layers 6 \
+  --epochs 3
+```
   --batch-size 16 \
   --max-length 256 \
   --num-layers 6 \
@@ -122,11 +127,11 @@ Implemented operations:
 - Shared memory for reductions
 - cuBLAS for matrix multiplication
 
-## Configuration for 11GB GPU
+## Configuration for 8GB GPU
 
 ### Recommended Settings
 
-**Small Model (Safe):**
+**Small Model (Safe - Default):**
 ```json
 {
   "model": {
@@ -136,38 +141,38 @@ Implemented operations:
     "d_ff": 2048
   },
   "training": {
-    "batch_size": 16,
-    "max_length": 256
-  }
-}
-```
-**Estimated VRAM:** ~4-5 GB
-
-**Medium Model (Moderate):**
-```json
-{
-  "model": {
-    "d_model": 768,
-    "num_heads": 12,
-    "num_layers": 8,
-    "d_ff": 3072
-  },
-  "training": {
     "batch_size": 12,
     "max_length": 256
   }
 }
 ```
-**Estimated VRAM:** ~7-8 GB
+**Estimated VRAM:** ~3-4 GB
 
-**Large Model (Maximum for 11GB):**
+**Medium Model (Moderate):**
 ```json
 {
   "model": {
-    "d_model": 1024,
-    "num_heads": 16,
-    "num_layers": 10,
-    "d_ff": 4096
+    "d_model": 640,
+    "num_heads": 10,
+    "num_layers": 6,
+    "d_ff": 2560
+  },
+  "training": {
+    "batch_size": 10,
+    "max_length": 256
+  }
+}
+```
+**Estimated VRAM:** ~5-6 GB
+
+**Large Model (Maximum for 8GB):**
+```json
+{
+  "model": {
+    "d_model": 768,
+    "num_heads": 12,
+    "num_layers": 6,
+    "d_ff": 3072
   },
   "training": {
     "batch_size": 8,
@@ -175,12 +180,14 @@ Implemented operations:
   }
 }
 ```
-**Estimated VRAM:** ~10-11 GB
+**Estimated VRAM:** ~7-8 GB
+
+### Memory Optimization Tips
 
 ### Memory Optimization Tips
 
 **If running out of memory:**
-1. Reduce batch size: `--batch-size 8`
+1. Reduce batch size: `--batch-size 6`
 2. Reduce sequence length: `--max-length 128`
 3. Reduce model layers: `--num-layers 4`
 4. Reduce model dimension: `--d-model 384`
@@ -407,15 +414,15 @@ nvidia-smi dmon
 # - Use data prefetching
 ```
 
-**4. Different GPU than GTX 1080 TI**
+**4. Different GPU than RTX 3070**
 ```bash
-# Edit scripts/build_cuda.sh
-# Change: -DCMAKE_CUDA_ARCHITECTURES=61
+# Edit scripts/build_cuda.sh or CMakeLists.txt
+# Change: -DCMAKE_CUDA_ARCHITECTURES=86
 # To your GPU's compute capability:
-# - GTX 1080: 61
-# - RTX 2080: 75
-# - RTX 3080: 86
-# - RTX 4080: 89
+# - GTX 1080 / GTX 1080 TI: 61
+# - RTX 2070 / RTX 2080: 75
+# - RTX 3070 / RTX 3080: 86  (default)
+# - RTX 4070 / RTX 4080: 89
 
 # Check your GPU's compute capability:
 nvidia-smi --query-gpu=compute_cap --format=csv
@@ -465,5 +472,5 @@ For issues or questions:
 ---
 
 **Last Updated:** November 15, 2025
-**CUDA Version:** 10.0+
-**Optimized For:** NVIDIA GTX 1080 TI (11GB, Pascal sm_61)
+**CUDA Version:** 11.0+
+**Optimized For:** NVIDIA RTX 3070 (8GB, Ampere sm_86)
