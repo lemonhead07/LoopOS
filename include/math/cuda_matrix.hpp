@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <cstddef>
+#include <stdexcept>
 
 #ifdef USE_CUDA
 #include <cuda_runtime.h>
