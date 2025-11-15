@@ -2,6 +2,47 @@
 
 This directory contains scripts for training and continuing model training.
 
+## CUDA GPU Training (NEW! ⚡)
+
+### Train Wikipedia with CUDA (Fastest - GTX 1080 TI Optimized)
+
+**Quick Start:**
+```bash
+# Full Wikipedia training with CUDA (5-10× faster than CPU)
+./scripts/train_wiki_cuda.sh
+
+# Test with 100 files first
+./scripts/train_wiki_cuda.sh --sample 100 --epochs 1
+```
+
+**Features:**
+- **5-10× faster** than CPU training
+- Optimized for GTX 1080 TI (11GB VRAM)
+- Real-time GPU memory monitoring
+- Automatic memory optimization
+- Works with other NVIDIA GPUs too
+
+**Requirements:**
+- NVIDIA GPU with CUDA support
+- CUDA Toolkit 10.0+
+- Built with `./scripts/build_cuda.sh`
+
+**Configuration Options:**
+```bash
+# Custom model size (for different GPUs)
+./scripts/train_wiki_cuda.sh --batch-size 32 --num-layers 8
+
+# Smaller model (for GPUs with less VRAM)
+./scripts/train_wiki_cuda.sh --batch-size 8 --d-model 384 --num-layers 4
+
+# Larger model (for GPUs with more VRAM)
+./scripts/train_wiki_cuda.sh --batch-size 32 --d-model 1024 --num-layers 12
+```
+
+See [docs/CUDA_TRAINING.md](../docs/CUDA_TRAINING.md) for complete CUDA documentation.
+
+---
+
 ## Continue Wikipedia Pretraining
 
 ### Quick Start (Recommended)

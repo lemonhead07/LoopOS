@@ -4,6 +4,39 @@ project(LoopOS VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Optional CUDA support
+# Usage: cmake -DUSE_CUDA=ON ..
+option(USE_CUDA "Enable CUDA GPU acceleration" OFF)
+
+if(USE_CUDA)
+    enable_language(CUDA)
+    find_package(CUDA REQUIRED)
+    
+    if(CUDA_FOUND)
+        set(CMAKE_CUDA_STANDARD 17)
+        set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+        
+        # CUDA architecture selection (optimized for RTX 3070 - Ampere architecture)
+        # Pascal = sm_61, Turing = sm_75, Ampere = sm_86, Ada = sm_89
+        if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+            set(CMAKE_CUDA_ARCHITECTURES 86)  # RTX 3070
+            message(STATUS "CUDA architectures set to sm_86 (Ampere - RTX 3070)")
+        endif()
+        
+        add_definitions(-DUSE_CUDA)
+        include_directories(${CUDA_INCLUDE_DIRS})
+        
+        message(STATUS "CUDA enabled")
+        message(STATUS "CUDA Version: ${CUDA_VERSION}")
+        message(STATUS "CUDA Architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+    else()
+        message(WARNING "CUDA requested but not found. Building without CUDA support.")
+        set(USE_CUDA OFF)
+    endif()
+else()
+    message(STATUS "CUDA disabled (use -DUSE_CUDA=ON to enable)")
+endif()
+
 # Find OpenMP
 find_package(OpenMP REQUIRED)
 
@@ -95,7 +128,7 @@ add_library(autoencoder_tokenizer STATIC
 target_link_libraries(autoencoder_tokenizer utils math_backend)
 
 # Math Library (Abstracted Matrix Backend)
-add_library(math_backend STATIC
+set(MATH_SOURCES
     src/math/cpu_matrix.cpp
     src/math/opencl_matrix.cpp
     src/math/parameter.cpp
@@ -103,7 +136,20 @@ add_library(math_backend STATIC
     src/utils/memory_manager.cpp
     src/utils/benchmark.cpp
 )
-target_link_libraries(math_backend utils OpenMP::OpenMP_CXX ${OpenCL_LIBRARIES} pthread)
+
+# Add CUDA sources if enabled
+if(USE_CUDA)
+    list(APPEND MATH_SOURCES
+        src/math/cuda_matrix.cpp
+        src/math/cuda_kernels.cu
+    )
+    add_library(math_backend STATIC ${MATH_SOURCES})
+    set_target_properties(math_backend PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    target_link_libraries(math_backend utils OpenMP::OpenMP_CXX ${OpenCL_LIBRARIES} ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES} pthread)
+else()
+    add_library(math_backend STATIC ${MATH_SOURCES})
+    target_link_libraries(math_backend utils OpenMP::OpenMP_CXX ${OpenCL_LIBRARIES} pthread)
+endif()
 
 # Transformer Library
 add_library(transformer STATIC
