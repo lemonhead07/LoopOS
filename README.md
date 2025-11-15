@@ -22,7 +22,30 @@ C++ Transformer Framework with Hardware Detection and Abstracted Matrix Backend
 
 ## Quick Start
 
-### Build
+### Fresh Installation (WSL/Linux)
+
+If you're setting up LoopOS on a brand new WSL box or Linux machine:
+
+```bash
+# One-command installation (installs all dependencies and builds)
+./scripts/install_wsl.sh
+
+# With CUDA support for NVIDIA GPU acceleration
+./scripts/install_wsl.sh --with-cuda
+
+# Just install dependencies without building
+./scripts/install_wsl.sh --skip-build
+```
+
+The installation script will:
+- Update your system
+- Install build tools (cmake, gcc, g++)
+- Install required libraries (OpenMP, OpenCL)
+- Optionally install CUDA toolkit
+- Clone/update the repository to ~/LoopOS
+- Build the project with optimizations
+
+### Build (if already have dependencies)
 
 ```bash
 # Build with auto-detected optimizations (recommended)
