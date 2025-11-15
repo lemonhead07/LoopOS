@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <cmath>
+#include <cstdio>
 
 // CUDA kernel for element-wise addition
 __global__ void elementwise_add_kernel(const float* a, const float* b, float* result, size_t size) {
