@@ -1,5 +1,6 @@
 #include "math/cpu_matrix.hpp"
 #include "math/opencl_matrix.hpp"
+#include "math/cuda_matrix.hpp"
 #include "utils/profiler.hpp"
 #include "utils/logger.hpp"
 #include <cmath>
@@ -608,6 +609,16 @@ MatrixFactory::Backend MatrixFactory::get_backend() {
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols) {
+    if (current_backend_ == Backend::CUDA) {
+#ifdef USE_CUDA
+        if (!CUDAMatrix::is_initialized()) {
+            CUDAMatrix::initialize_cuda();
+        }
+        return std::make_unique<CUDAMatrix>(rows, cols);
+#else
+        Utils::Logger::warning("CUDA backend requested but not compiled. Falling back to CPU.");
+#endif
+    }
     if (current_backend_ == Backend::OPENCL) {
         if (!OpenCLMatrix::is_initialized()) {
             OpenCLMatrix::initialize_opencl();
@@ -618,6 +629,16 @@ std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols) {
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols, const std::vector<float>& data) {
+    if (current_backend_ == Backend::CUDA) {
+#ifdef USE_CUDA
+        if (!CUDAMatrix::is_initialized()) {
+            CUDAMatrix::initialize_cuda();
+        }
+        return std::make_unique<CUDAMatrix>(rows, cols, data);
+#else
+        Utils::Logger::warning("CUDA backend requested but not compiled. Falling back to CPU.");
+#endif
+    }
     if (current_backend_ == Backend::OPENCL) {
         if (!OpenCLMatrix::is_initialized()) {
             OpenCLMatrix::initialize_opencl();
@@ -628,6 +649,18 @@ std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols, const s
 }
 
 std::unique_ptr<IMatrix> MatrixFactory::create(size_t rows, size_t cols, float initial_value) {
+    if (current_backend_ == Backend::CUDA) {
+#ifdef USE_CUDA
+        if (!CUDAMatrix::is_initialized()) {
+            CUDAMatrix::initialize_cuda();
+        }
+        auto mat = std::make_unique<CUDAMatrix>(rows, cols);
+        mat->fill(initial_value);
+        return mat;
+#else
+        Utils::Logger::warning("CUDA backend requested but not compiled. Falling back to CPU.");
+#endif
+    }
     if (current_backend_ == Backend::OPENCL) {
         if (!OpenCLMatrix::is_initialized()) {
             OpenCLMatrix::initialize_opencl();

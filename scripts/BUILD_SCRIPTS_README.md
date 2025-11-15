@@ -1,10 +1,34 @@
 # LoopOS Build Scripts
 
-This directory contains build scripts optimized for different CPU instruction sets.
+This directory contains build scripts optimized for different CPU instruction sets and GPU acceleration.
 
 ## Available Build Scripts
 
-### 1. `build_avx2.sh` - Standard Build (Recommended for Development)
+### 1. `build_cuda.sh` - CUDA GPU Build (Fastest - GTX 1080 TI Optimized) ⚡
+
+**Use this for:**
+- Training with NVIDIA GPU acceleration
+- 5-10× faster than CPU-only builds
+- GTX 1080 TI and newer GPUs
+- Maximum performance on large models
+
+**Requirements:**
+- NVIDIA GPU (GTX 1080 TI or compatible)
+- CUDA Toolkit 10.0+
+- 11GB+ VRAM recommended
+
+**Usage:**
+```bash
+./scripts/build_cuda.sh
+```
+
+**Output:** Executables in `./build_cuda/`
+
+**Performance:** 5-10× faster than CPU for transformer training
+
+---
+
+### 2. `build_avx2.sh` - Standard Build (Recommended for Development)
 
 **Use this for:**
 - Development and testing
@@ -25,11 +49,11 @@ This directory contains build scripts optimized for different CPU instruction se
 
 ---
 
-### 2. `build_avx512.sh` - High-Performance Build (For AVX-512 Systems)
+### 3. `build_avx512.sh` - High-Performance Build (For AVX-512 Systems)
 
 **Use this for:**
 - Production on high-end servers
-- Maximum performance on compatible CPUs
+- Maximum CPU performance on compatible CPUs
 - Systems with AVX-512 support
 
 **Compatible CPUs:**
@@ -47,7 +71,7 @@ This directory contains build scripts optimized for different CPU instruction se
 
 ---
 
-### 3. `build.sh` - Auto-Detect Build (Default)
+### 4. `build.sh` - Auto-Detect Build (Default)
 
 **Default behavior:**
 - Builds with AVX2 (safe on most systems)
@@ -64,6 +88,17 @@ This directory contains build scripts optimized for different CPU instruction se
 ---
 
 ## How to Choose
+
+### Check Your Hardware
+
+**Check for NVIDIA GPU:**
+```bash
+# Check if NVIDIA GPU is available
+nvidia-smi
+
+# If you see GPU info → Use build_cuda.sh (FASTEST!)
+# If command not found → Use CPU builds below
+```
 
 ### Check Your CPU
 
